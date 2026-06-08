@@ -583,7 +583,7 @@ def fetch_stock_research(ticker):
                   f"EPS=${format_value(result['eps'])}")
         else:
             # Try with different suffix for foreign stocks
-            for suffix in [".NS", ".L", ".T", ".KS", ".HK", ".TO"]:
+            for suffix in [".NS", ".L", ".T", ".KS", ".HK", ".TO", ".SA"]:
                 try:
                     alt_ticker = ticker + suffix
                     with _yf_lock:
@@ -1080,10 +1080,11 @@ def run(personas=None):
             try:
                 result = future.result()
                 all_results.append(result)
-                print(f"\n[Engine]  {\"=\"*50}")
-                print(f"[Engine]  RESULT: {result[\"persona\"]} → {result[\"status\"]} "
-                      f"({result[\"word_count\"]} words, {result.get(\"picks_count\", 0)} picks)")
-                print(f"[Engine]  {\"=\"*50}\n")
+                sep = "=" * 50
+                print(f"\n[Engine]  {sep}")
+                print(f"[Engine]  RESULT: {result['persona']} -> {result['status']} "
+                      f"({result['word_count']} words, {result.get('picks_count', 0)} picks)")
+                print(f"[Engine]  {sep}\n")
             except Exception as e:
                 print(f"\n[Engine]  ✗ {persona_name}: Exception in thread — {e}")
                 all_results.append({"persona": persona_name, "status": "EXCEPTION", "word_count": 0, "picks_count": 0})
