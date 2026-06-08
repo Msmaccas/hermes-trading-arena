@@ -44,7 +44,7 @@ DATE_STR = TODAY.isoformat()
 
 OBSIDIAN_VAULT = os.environ.get(
     "OBSIDIAN_VAULT_PATH",
-    "/Users/jiayanghan/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mind Palace Obsidian current"
+    os.path.expanduser("~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Mind Palace Obsidian current")
 )
 
 TRADING_PERSONAS = [
