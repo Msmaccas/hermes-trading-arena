@@ -40,9 +40,8 @@ TRADING_PERSONAS = [
     "david-ryan", "matt-caruso", "brian-shannon", "dan-zanger", "nick-schmidt",
 ]
 
-BUSINESS_PERSONAS = [
-    "hormozi", "samovens", "kallaway",
-]
+# BUSINESS_PERSONAS — moved to separate repo: hermes-business-arena
+BUSINESS_PERSONAS = []
 
 TV_MARKETS = {
     "US":         "america",
