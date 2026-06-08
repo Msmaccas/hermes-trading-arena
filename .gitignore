@@ -1,38 +1,8 @@
-# Secrets
 .env
 *.env.local
-**/.env
-
-# Config files with secrets
-**/config.yaml
-
-# Local OS files
-.DS_Store
-*.swp
-*.swo
-
-# Python
 __pycache__/
 *.pyc
-venv/
-.venv/
-
-# Node
-node_modules/
-
-# Hermes-specific
-**/auth.json
-**/auth.lock
-**/state.db
-**/sessions/
-**/memories/
-**/workspace/
-**/audio_cache/
-**/image_cache/
-**/models_dev_cache.json
-
-# Large binaries
-*.pdf
-*.vtt
-*.mp3
-*.mp4
+.DS_Store
+screenshots/
+logs/
+*.db
