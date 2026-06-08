@@ -20,6 +20,16 @@ from pathlib import Path
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+# Import accuracy tracking + dedup
+import sys
+_fixes_path = os.path.expanduser("~/.hermes/scripts/engine_fixes")
+if _fixes_path not in sys.path:
+    sys.path.insert(0, _fixes_path)
+try:
+    from engine_fixes import init_accuracy_db, record_pick, score_week_picks, resolve_watchlist_conflicts, compute_rankings
+    _HAS_ACCURACY = True
+except ImportError:
+    _HAS_ACCURACY = False
 
 import requests
 from bs4 import BeautifulSoup
@@ -51,6 +61,29 @@ TV_MARKETS = {
     "UK":         "uk",
     "Brazil":     "brazil",
     "Korea":      "korea",
+}
+
+# ─── PERSONA MARKET ROTATION ──────────────────────────────────────────────────
+# Each persona has a PRIMARY market focus + 2+ secondary markets.
+# This FORCES global coverage and prevents everyone picking the same US stocks.
+PERSONA_MARKET_ROTATION = {
+    "oneil":          {"primary": "US", "secondary": ["Hong Kong", "Korea"]},
+    "buffet":         {"primary": "Japan", "secondary": ["US", "UK"]},
+    "lynch":          {"primary": "UK", "secondary": ["Europe", "India"]},
+    "minervini":      {"primary": "US", "secondary": ["India", "Brazil"]},
+    "qullamaggie":    {"primary": "Korea", "secondary": ["Japan", "US"]},
+    "david-ryan":     {"primary": "Hong Kong", "secondary": ["Korea", "China"]},
+    "matt-caruso":    {"primary": "India", "secondary": ["Brazil", "US"]},
+    "brian-shannon":  {"primary": "US", "secondary": ["Japan", "UK"]},
+    "dan-zanger":     {"primary": "US", "secondary": ["Korea", "Hong Kong"]},
+    "nick-schmidt":   {"primary": "Brazil", "secondary": ["India", "Korea"]},
+}
+
+# Exchange suffix mapping for global stock access via yfinance
+EXCHANGE_SUFFIXES = {
+    "UK": ".L", "Japan": ".T", "Korea": ".KS", "India": ".NS",
+    "Brazil": ".SA", "Hong Kong": ".HK", "Canada": ".TO",
+    "Singapore": ".SI", "Australia": ".AX",
 }
 
 ETF_KEYWORDS = [
@@ -366,12 +399,16 @@ Based on the market data above, generate your watchlist for today. This is a RES
 
 CRITICAL INSTRUCTIONS:
 1. Use YOUR methodology (CANSLIM, value investing, PEG, VCP, etc.) to identify stocks
-2. INCLUDE AT LEAST 10-15 STOCKS in your watchlist. Even in a tough market, there are always relative-strength leaders, defensive names, and global opportunities to track. The more stocks you list, the more research data I can collect for our database.
+2. INCLUDE AT LEAST 10-15 STOCKS in your watchlist. The more stocks you list, the more research data I can collect.
 3. Focus on INDIVIDUAL STOCKS first (not just ETFs). Include some ETFs if relevant, but emphasize specific companies.
-4. ONLY include tickers that trade on major exchanges (NYSE, NASDAQ, LSE, TSE, etc.)
+4. ONLY include tickers that trade on major exchanges
 5. Focus on liquid, institutional-quality stocks
-6. Include BOTH US and global stocks as appropriate
+6. YOUR PRIMARY MARKET: {PERSONA_MARKET_ROTATION.get(persona, {}).get('primary', 'US')}
+   YOUR SECONDARY MARKETS: {', '.join(PERSONA_MARKET_ROTATION.get(persona, {}).get('secondary', ['global']))}
+   RULE: At LEAST 50% of picks must come from your primary market. Rest from secondary markets.
+   RULE: If primary is NOT US, you must NOT pick more than 20% US stocks.
 7. The minimum is 10 stocks — this is a research engine and needs data to work with.
+8. FORCE DIFFERENTIATION: Do NOT pick meme stocks or obvious names. Find unique opportunities in YOUR markets that other personas will miss.
 
 You MUST respond with a valid JSON block at the end of your response in this EXACT format:
 
@@ -516,6 +553,113 @@ def format_volume(vol):
         return "N/A"
 
 
+def compute_technical_indicators(hist, ticker="?"):
+    """Compute REAL technical indicators from yfinance OHLCV data.
+    
+    Returns dict with RSI(14), MACD(12,26,9), SMA(20/50/200), VWAP, ATR(14),
+    and last 10 daily OHLCV rows for the LLM to reference.
+    Numbers only — no hallucination possible since they're COMPUTED.
+    """
+    indicators = {}
+    if hist is None or hist.empty or len(hist) < 15:
+        return indicators
+    
+    close = hist['Close'].dropna()
+    high = hist['High'].dropna()
+    low = hist['Low'].dropna()
+    volume = hist['Volume'].dropna() if 'Volume' in hist.columns else None
+    
+    # --- RSI(14) ---
+    try:
+        delta = close.diff()
+        gain = delta.where(delta > 0, 0.0)
+        loss = (-delta.where(delta < 0, 0.0))
+        avg_gain = gain.rolling(14).mean()
+        avg_loss = loss.rolling(14).mean()
+        rs = (avg_gain / avg_loss.replace(0, float('nan')))
+        rsi = 100 - (100 / (1 + rs))
+        indicators['rsi_14'] = round(float(rsi.iloc[-1]), 1) if len(rsi) > 0 else None
+        indicators['rsi_14_prev'] = round(float(rsi.iloc[-2]), 1) if len(rsi) > 1 else None
+    except Exception:
+        indicators['rsi_14'] = None
+    
+    # --- MACD(12,26,9) ---
+    try:
+        ema12 = close.ewm(span=12).mean()
+        ema26 = close.ewm(span=26).mean()
+        macd_line = ema12 - ema26
+        signal = macd_line.ewm(span=9).mean()
+        histogram = macd_line - signal
+        indicators['macd'] = round(float(macd_line.iloc[-1]), 3) if len(macd_line) > 0 else None
+        indicators['macd_signal'] = round(float(signal.iloc[-1]), 3) if len(signal) > 0 else None
+        indicators['macd_histogram'] = round(float(histogram.iloc[-1]), 3) if len(histogram) > 0 else None
+    except Exception:
+        indicators['macd'] = None
+    
+    # --- SMA(20), SMA(50), SMA(200) ---
+    try:
+        sma20 = close.rolling(20).mean()
+        sma50 = close.rolling(50).mean()
+        indicators['sma_20'] = round(float(sma20.iloc[-1]), 2) if len(sma20) > 0 else None
+        indicators['price_vs_sma20_pct'] = round(float((close.iloc[-1] / sma20.iloc[-1] - 1) * 100), 2) if (len(sma20) > 0 and sma20.iloc[-1] > 0) else None
+        if len(close) >= 50:
+            sma200 = close.rolling(200).mean()
+            indicators['sma_50'] = round(float(sma50.iloc[-1]), 2)
+            indicators['sma_200'] = round(float(sma200.iloc[-1]), 2) if len(sma200) > 0 else None
+            indicators['price_vs_sma200_pct'] = round(float((close.iloc[-1] / sma200.iloc[-1] - 1) * 100), 2) if (sma200.iloc[-1] > 0) else None
+        else:
+            indicators['sma_50'] = round(float(sma50.iloc[-1]), 2) if len(sma50) > 0 else None
+    except Exception:
+        pass
+    
+    # --- VWAP (cumulative) ---
+    try:
+        if volume is not None:
+            vwap_series = (close * volume).cumsum() / volume.cumsum()
+            indicators['vwap'] = round(float(vwap_series.iloc[-1]), 2) if len(vwap_series) > 0 else None
+            # Price vs VWAP
+            iv = close.iloc[-1]
+            vw = vwap_series.iloc[-1]
+            if vw and iv:
+                indicators['price_vs_vwap_pct'] = round(float((iv / vw - 1) * 100), 2)
+    except Exception:
+        indicators['vwap'] = None
+    
+    # --- ATR(14) ---
+    try:
+        tr = pd.concat([
+            high - low,
+            (high - close.shift()).abs(),
+            (low - close.shift()).abs()
+        ], axis=1).max(axis=1)
+        atr = tr.rolling(14).mean()
+        indicators['atr_14'] = round(float(atr.iloc[-1]), 2) if len(atr) > 0 else None
+        if indicators.get('atr_14') and close.iloc[-1]:
+            indicators['atr_pct'] = round(float(indicators['atr_14'] / close.iloc[-1] * 100), 2)
+    except Exception:
+        indicators['atr_14'] = None
+    
+    # --- Last 10 daily candles (OHLCV) ---
+    try:
+        last_n = hist.tail(10)
+        candles = []
+        for idx, row in last_n.iterrows():
+            dt = idx.strftime('%Y-%m-%d') if hasattr(idx, 'strftime') else str(idx)
+            o = round(float(row.get('Open', 0)), 2)
+            h = round(float(row.get('High', 0)), 2)
+            l = round(float(row.get('Low', 0)), 2)
+            c = round(float(row.get('Close', 0)), 2)
+            v = int(row.get('Volume', 0)) if 'Volume' in last_n.columns else 0
+            body_pct = round(abs(c - o) / o * 100, 2) if o > 0 else 0
+            direction = "UP" if c > o else "DOWN"
+            candles.append(f"{dt} O:{o} H:{h} L:{l} C:{c} V:{v} {direction} body:{body_pct}%")
+        indicators['last_10_candles'] = "\n".join(candles)
+    except Exception:
+        indicators['last_10_candles'] = "N/A"
+    
+    return indicators
+
+
 def fetch_stock_research(ticker):
     """
     Phase 2a: Fetch fundamental and price data from yfinance for one ticker.
@@ -566,13 +710,18 @@ def fetch_stock_research(ticker):
         result["institutional_holders"] = info.get("heldPercentInstitutions")
         result["insider_holders"] = info.get("heldPercentInsiders")
 
-        # Try to get recent price history for volume comparison
+        # Try to get recent price history for REAL indicator computation
         try:
-            hist = stock.history(period="1mo")
+            hist = stock.history(period="6mo")
             if not hist.empty and "Volume" in hist.columns:
                 recent_vols = hist["Volume"].dropna()
                 if len(recent_vols) > 1:
                     result["volume_vs_avg"] = float(recent_vols.iloc[-1] / recent_vols.mean())
+                # Compute REAL technical indicators from OHLCV data
+                indicators = compute_technical_indicators(hist, ticker)
+                result["indicators"] = indicators
+                if indicators.get("rsi_14"):
+                    print(f"[Engine]    {ticker}: RSI(14)={indicators['rsi_14']} | MACD={indicators.get('macd','N/A')} | VWAP={indicators.get('vwap','N/A')} | ATR={indicators.get('atr_14','N/A')}")
         except Exception:
             pass
 
@@ -787,15 +936,49 @@ def build_research_summary(research_data, max_news=3):
                      f"High: ${format_value(data.get('target_high'))}) | "
                      f"**Rating:** {data.get('recommendation', 'N/A')}")
 
-        lines.append(f"**Institutional Ownership:** {format_value(data.get('institutional_holders'), '{:.1%}') if data.get('institutional_holders') else 'N/A'} | "
+        lines.append(f"**Insider Ownership:** {format_value(data.get('institutional_holders'), '{:.1%}') if data.get('institutional_holders') else 'N/A'} | "
                      f"**Insider Ownership:** {format_value(data.get('insider_holders'), '{:.1%}') if data.get('insider_holders') else 'N/A'}")
 
+        # -- REAL COMPUTED TECHNICAL INDICATORS --
+        ind = data.get("indicators", {})
+        if ind:
+            lines.append("")
+            rsi_str = f"RSI(14): {ind.get('rsi_14', 'N/A')}"
+            if ind.get('rsi_14_prev'):
+                arrow = "▲" if ind.get('rsi_14', 0) > ind.get('rsi_14_prev', 0) else "▼"
+                rsi_str += f" ({arrow} from {ind['rsi_14_prev']})"
+            macd_str = f"MACD: {ind.get('macd', 'N/A')} / Sig: {ind.get('macd_signal', 'N/A')} / Hist: {ind.get('macd_histogram', 'N/A')}"
+            ma_str = f"SMA20: ${format_value(ind.get('sma_20'))}"
+            if ind.get('price_vs_sma20_pct') is not None:
+                ma_str += f" ({ind['price_vs_sma20_pct']:+.1f}%)"
+            if ind.get('sma_50') is not None:
+                ma_str += f" | SMA50: ${format_value(ind.get('sma_50'))}"
+            if ind.get('sma_200') is not None:
+                ma_str += f" | SMA200: ${format_value(ind.get('sma_200'))} ({ind.get('price_vs_sma200_pct', 0):+.1f}%)"
+            vwap_str = f"VWAP: ${format_value(ind.get('vwap'))}"
+            if ind.get('price_vs_vwap_pct') is not None:
+                vwap_str += f" (price {ind['price_vs_vwap_pct']:+.1f}% vs VWAP)"
+            atr_str = f"ATR(14): ${format_value(ind.get('atr_14'))}"
+            if ind.get('atr_pct') is not None:
+                atr_str += f" ({ind['atr_pct']:.1f}% of price)"
+                lines.append(f"**Technical Indicators (COMPUTED from REAL OHLCV data):**")
+                lines.append(f"  {rsi_str}")
+                lines.append(f"  {macd_str}")
+                lines.append(f"  {ma_str}")
+                lines.append(f"  {vwap_str}")
+                lines.append(f"  {atr_str}")
+            candles = ind.get('last_10_candles', '')
+            if candles and candles != 'N/A':
+                lines.append(f"\n**Last 10 Daily Candles:**")
+                for c in candles.split('\n'):
+                    lines.append(f"  {c}")
+        
         # News
-        news = data.get("news", [])
-        if news:
-            lines.append(f"\n**Recent News:**")
+            news = data.get("news", [])
+            if news:
+                lines.append(f"\n**Recent News:**")
             for article in news[:max_news]:
-                date_str = article.get("date", "")[:16] if article.get("date") else ""
+                date_str = article.get("date", "")[:16] if article.get("date", "") else ""
                 source = article.get("source", "")
                 title = article.get("title", "")
                 snippet = article.get("snippet", "")
@@ -871,13 +1054,15 @@ Write a COMPLETE analysis for your weekly competition entry. This analysis will 
    - Risk factors
 
 ### MANDATORY RULES:
-- EVERY data point must come from the research provided — do not invent prices, volumes, or fundamentals
-- Each stock must have 400+ words of analysis
+- EVERY price/volume/fundamental must come from the research data — DO NOT INVENT ANY DATA
+- ⚠️ NO PRICE TARGETS unless you compute them from the real data provided (e.g., fib extension from actual pivot low, AVWAP from real volume data). NEVER say "VWAP from October 2023 low" — you don't have that data.
+- ⚠️ NEVER reference indicator levels you cannot see — if the research didn't give you RSI(14), MACD, or AVWAP data, do NOT invent them
+- Each stock must have 400+ words of analysis with EXACT quotes from YOUR books/interviews
+- ⚠️ EVERY quote must include a SOURCE URL (Amazon link, YouTube timestamp, book page number)
 - Total analysis must be 5000+ words minimum
-- Use YOUR EXACT voice and methodology
-- Include verbatim quotes from your work
-- Be bold where warranted, cautious where warranted
-- NO generic boilerplate
+- Use YOUR EXACT voice and methodology — verbatim quotes, not paraphrasing
+- ⚠️ If a stock doesn't have real price data, do NOT analyze it — skip it
+- NO generic boilerplate. NO hallucinated numbers. NO fake indicator levels.
 
 Return ONLY the analysis. Start with '## MARKET SENTIMENT ASSESSMENT'."""
     print(f"[Engine]  Phase 3: Generating final analysis for {persona}...")
@@ -969,22 +1154,23 @@ def process_persona_full(client, persona, context):
     watchlist_tickers, raw_watchlist = generate_watchlist(client, persona, soul_content, context_str)
     if not watchlist_tickers:
         print(f"[Engine]  ✗ {persona}: No watchlist generated by AI")
-        # Fallback: use top US gainers from market context
-        print(f"[Engine]    Falling back to TradingView top gainers...")
+        # Fallback: try persona's PRIMARY market first, then secondary markets
+        print(f"[Engine]    Falling back to persona's primary market...")
         fallback_tickers = []
-        for s in context.get("gainers", {}).get("US", []):
-            t = s["ticker"]
-            if re.match(r'^[A-Z]{1,5}$', t) and t not in ("SPY", "QQQ", "IWM", "DIA", "GLD", "TLT",
-                        "XLK", "XLF", "XLV", "XLI", "XLE", "XLP", "XLY", "XLB", "XLU", "XLRE",
-                        "SMH", "IBB", "ARKK"):
-                fallback_tickers.append(t)
-            if len(fallback_tickers) >= 10:
-                break
-        # Also add some well-known defensive names for a bear market
-        for t in ["UNH", "LLY", "COST", "MCK", "ABBV", "PG", "WMT", "MRK", "JNJ", "PFE"]:
-            if t not in fallback_tickers:
-                fallback_tickers.append(t)
-            if len(fallback_tickers) >= 15:
+        persona_mkt = PERSONA_MARKET_ROTATION.get(persona, {}).get('primary', 'US')
+        fallback_regions = [persona_mkt] + PERSONA_MARKET_ROTATION.get(persona, {}).get('secondary', [])
+        for region in fallback_regions:
+            gainers = context.get("gainers", {}).get(region, [])
+            for s in gainers:
+                t = s.get("ticker", "")
+                if re.match(r'^[A-Z\.]{1,7}$', t) and t not in ("SPY", "QQQ", "IWM", "DIA", "GLD", "TLT",
+                            "XLK", "XLF", "XLV", "XLI", "XLE", "XLP", "XLY", "XLB", "XLU", "XLRE",
+                            "SMH", "IBB", "ARKK"):
+                    if t not in fallback_tickers:
+                        fallback_tickers.append(t)
+                if len(fallback_tickers) >= 12:
+                    break
+            if len(fallback_tickers) >= 12:
                 break
         watchlist_tickers = fallback_tickers
         print(f"[Engine]    Fallback watchlist ({len(watchlist_tickers)}): {', '.join(watchlist_tickers[:10])}")
@@ -1064,8 +1250,11 @@ def run(personas=None):
     context = fetch_market_context()
     print(f"[Engine]  Market context: {len(context['indices'])} indices, "
           f"{len(context['sectors'])} sectors, "
-          f"{sum(len(v) for v in context['gainers'].values())} global gainers")
-    print()
+          f"{len(context['gainers'])} market gainer sets")
+
+    # Init accuracy DB
+    if _HAS_ACCURACY:
+        init_accuracy_db()
 
     # 2. Get DeepSeek client
     client = get_deepseek_client()
