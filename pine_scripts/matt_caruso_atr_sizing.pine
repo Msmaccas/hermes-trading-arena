@@ -1,0 +1,140 @@
+//@version=5
+indicator(title="Matt Caruso ATR Sizing", shorttitle="ATR Sizing", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Matt Caruso ATR Position Sizing & Trend Management
+//  - ATR(14) overlay as dynamic volatility measure
+//  - Position size indicator (% equity per unit risk)
+//  - Dollar stop calculation (fixed $ risk per position)
+//  - Staged entry zones (1/3, 1/3, 1/3)
+//  - Trend strength via ATR slope
+//  - 4 pattern types: Breakout, Pullback, Coil, Expectation Breaker
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+accountEquity    = input.float(100000, "Account Equity ($)", step=10000)
+riskPerPosition  = input.float(1.0, "Risk Per Position (%)", step=0.25, minval=0.25, maxval=3.0)
+atrLen           = input.int(14, "ATR Length", minval=5, maxval=50)
+showZones        = input.bool(true, "Show Staged Entry Zones")
+showDollarStop   = input.bool(true, "Show Dollar Stop Level")
+stage1Pct        = input.float(10.0, "Stage 1: Initial (% equity)", step=2.5, minval=5.0, maxval=25.0)
+stage2Trigger    = input.float(8.0, "Stage 2: Add at % gain", step=1.0, minval=3.0, maxval=15.0)
+stage3Trigger    = input.float(15.0, "Stage 3: Add at % gain", step=1.0, minval=10.0, maxval=25.0)
+fastExitPct      = input.float(70.0, "Fast Run: Sell 70-100% gain", step=5.0, minval=40.0, maxval=120.0)
+
+// ─── ATR(14) Overlay ───────────────────────────────────────────────────────
+atrVal = ta.atr(atrLen)
+atrPct = (atrVal / close) * 100
+
+// Plot ATR as band around price
+atrUpper = close + (atrVal * 0.5)
+atrLower = close - (atrVal * 0.5)
+uPlot = plot(atrUpper, "ATR Upper (0.5x)", color.new(color.green, 25), 1)
+lPlot = plot(atrLower, "ATR Lower (0.5x)", color.new(color.red, 25), 1)
+fill(uPlot, lPlot, color.new(color.gray, 08), title="ATR Band Fill")
+
+// ATR(1x) wider band
+plot(close + atrVal, "ATR Upper (1x)", color.new(color.green, 12), 1)
+plot(close - atrVal, "ATR Lower (1x)", color.new(color.red, 12), 1)
+
+// ─── ATR Slope (trend strength indicator) ────────────────────────────────
+atrSlope = (atrVal - atrVal[5]) / atrVal[5] * 100
+plot(atrSlope, "ATR Slope %", color.new(color.orange, 60), 2, display=display.none)
+hline(0, "Zero", color.new(color.gray, 40), hline.style_dashed, display=display.none)
+
+// ─── Dollar Stop Calculation ───────────────────────────────────────────
+// "I know my dollar stop, which is a percentage of my account."
+dollarRisk = accountEquity * (riskPerPosition / 100)
+positionSizeUnits = atrVal > 0 ? dollarRisk / atrVal : 0
+stage1Shares = positionSizeUnits * (stage1Pct / 100)
+stage1Value = stage1Shares * close
+stage1RiskPct = (dollarRisk * (stage1Pct / 100)) / stage1Value * 100 if stage1Value > 0 else na
+
+// ATR-based stop level (2x ATR below/above entry-like reference)
+stopLevel = close - (atrVal * 2)
+plot(showDollarStop and not na(stopLevel) ? stopLevel : na,
+     "Stop (2x ATR)", color.new(color.red, 50), 1, style=plot.style_cross)
+
+// ─── Staged Entry Zones ──────────────────────────────────────────────────
+// Stage 1: Initial at pivot
+// Stage 2: Add at +8% gain from reference
+// Stage 3: Add at +15% gain from reference
+var float stage2Price = na
+var float stage3Price = na
+var int tradeStage = 0
+
+// Use highest high of last 20 bars as reference pivot
+refPrice = ta.highest(close, 20)
+if showZones
+    stage2Price := refPrice * (1 + stage2Trigger / 100)
+    stage3Price := refPrice * (1 + stage3Trigger / 100)
+
+    // Draw zones
+    line.new(bar_index - 10, stage2Price, bar_index + 5, stage2Price,
+             color=color.new(color.blue, 50), width=1, style=line.style_dashed)
+    line.new(bar_index - 10, stage3Price, bar_index + 5, stage3Price,
+             color=color.new(color.purple, 50), width=1, style=line.style_dashed)
+
+    // Entry labels
+    if ta.cross(close, stage2Price)
+        label.new(bar_index, high, "ADD STAGE 2\n+" + str.tostring(stage2Trigger, "#.#") + "%",
+                  style=label.style_label_down, color=color.new(color.blue, 60),
+                  textcolor=color.white, size=size.tiny)
+    if ta.cross(close, stage3Price)
+        label.new(bar_index, high, "ADD STAGE 3\n+" + str.tostring(stage3Trigger, "#.#") + "%",
+                  style=label.style_label_down, color=color.new(color.purple, 60),
+                  textcolor=color.white, size=size.tiny)
+
+// ─── Fast Run Signal (70-100% gain) ──────────────────────────────────────
+gainSinceRef = refPrice > 0 ? (close - refPrice) / refPrice * 100 : 0
+fastRun = gainSinceRef >= (fastExitPct * 0.7) and gainSinceRef < fastExitPct
+sellIntoStrength = gainSinceRef >= fastExitPct
+
+// ─── Coil Pattern Detection ──────────────────────────────────────────────
+// "Coil patterns where there's volatility diminishing"
+rangePct = (high - low) / close * 100
+coilDetected = ta.sma(atrPct, 5) < ta.sma(atrPct, 20) and ta.sma(atrPct, 20) < ta.sma(atrPct, 50)
+coilLabel = coilDetected and atrPct < 1.0
+
+// ─── Expectation Breaker ────────────────────────────────────────────────
+sma20 = ta.sma(close, 20)
+sma50 = ta.sma(close, 50)
+expectationBreaker = ta.crossover(close, sma20) and close > sma50 and volume > ta.sma(volume, 50) * 1.5
+
+// ─── Labels ──────────────────────────────────────────────────────────────
+if coilLabel
+    label.new(bar_index, low, "COIL\nATR:" + str.tostring(atrPct, "#.##") + "%",
+              style=label.style_label_up, color=color.new(color.orange, 60),
+              textcolor=color.white, size=size.small)
+
+if expectationBreaker
+    label.new(bar_index, high, "EXP BRKR",
+              style=label.style_label_down, color=color.new(color.blue, 60),
+              textcolor=color.white, size=size.small)
+
+if sellIntoStrength
+    label.new(bar_index, high, "SELL INTO\n+" + str.tostring(gainSinceRef, "#.#") + "%",
+              style=label.style_label_down, color=color.new(color.red, 60),
+              textcolor=color.white, size=size.small)
+
+// ─── Table: Position Sizing Info ────────────────────────────────────────
+if barstate.islast
+    var tbl = table.new(position.top_right, 2, 6, bgcolor=color.new(color.black, 80), border_width=1)
+    table.cell(tbl, 0, 0, "Dollar Risk", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 1, "$" + str.tostring(dollarRisk, "#,##0"), text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 1, 0, "ATR(14)", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 1, "$" + str.tostring(atrVal, "#.##"), text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 0, 2, "Position Units", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 3, str.tostring(positionSizeUnits, "#,##0"), text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 1, 2, "Stage1 (10%)", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 3, str.tostring(stage1Shares, "#,##0") + " sh", text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 0, 4, "Stop Level", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 5, "$" + str.tostring(stopLevel, "#.##"), text_color=color.red, text_size=size.small)
+    table.cell(tbl, 1, 4, "ATR Slope", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 5, str.tostring(atrSlope, "#.#") + "%", text_color=atrSlope > 0 ? color.lime : color.red, text_size=size.small)
+
+// ─── Alerts ──────────────────────────────────────────────────────────────
+alertcondition(coilLabel, title="Coil Pattern",
+               message="Coil pattern detected - volatility diminishing! {{ticker}}")
+alertcondition(sellIntoStrength, title="Sell Into Strength",
+               message="Fast run detected! {{ticker}} gained {{gainSinceRef}}%. Consider selling into strength.")
