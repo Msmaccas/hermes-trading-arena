@@ -20,7 +20,7 @@ REASONING (each bullet = verbatim quote):
 
 [1] "The 85-85 screen (EPS 85+ and RS 85+) is my starting point every morning. That filters out 95% of garbage."
     Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
-    => EPS rating fails because net income growth is +3.1% (requirement is 20% minimum in CANSLIM). RS rating fails because RS line is NOT making new highs. The first filter kills this stock — I'd never even see it.
+    => f'EPS rating fails because net income growth is +-35.6% (requirement is 20% minimum in CANSLIM). RS rating fails because RS line is NOT making new highs. The first filter kills this stock — I'd never even see it.
 
 [2] "I look for tight closes for at least three weeks near the top of the base. That tightness shows the stock is coiling for a breakout."
     Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
@@ -32,15 +32,15 @@ REASONING (each bullet = verbatim quote):
 
 [4] "Cut your losers like a cancer. If a stock isn't acting right, get rid of it immediately. Don't hope it comes back."
     Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
-    => CFO sold 80% of holdings. Chairman $5.5M secondary. This stock 'isn't acting right.' The people closest to it are getting out. Cut it.
+    => f'CFO sold 0% of holdings. Chairman $0.0M secondary. This stock 'isn't acting right.' The people closest to it are getting out. Cut it.
 
 [5] "Sitting is more important than thinking."
     Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
-    => 6 distribution days on SPY. Market in correction. The best thing you can do right now is sit on your hands and wait for the next uptrend. Even if SN were a perfect setup (it's not), the market says stay in cash.
+    => f'{d['distribution_days']} distribution days on SPY. Market in correction. The best thing you can do right now is sit on your hands and wait for the next uptrend. Even if {d['ticker']} were a perfect setup (it's not), the market says stay in cash.
 
 [6] "The biggest mistake investors make is holding onto their losers and selling their winners."
     Source: MarketSmith Webinar: https://marketsmith.investors.com
-    => CANSLIM fundamental screen: C (+3.1% EPS) FAIL, A (+15.6% revenue, slowing) FAIL, S (insiders selling) FAIL, L (RS low) FAIL, I (institutional confidence breaking) FAIL, M (6 distro days) FAIL. Only N marginal. DON'T HOLD THIS LOSER.
+    => f'CANSLIM fundamental screen: C (+{d['net_income_growth_pct']}% EPS) FAIL, A (+{d['revenue_growth_pct']}% revenue, slowing) FAIL, S (insiders selling) FAIL, L (RS low) FAIL, I (institutional confidence breaking) FAIL, M ({d['distribution_days']} distro days) FAIL. Only N marginal. DON'T HOLD THIS LOSER.
 
 VERDICT: SELL. Conviction: 0.8.
 
@@ -48,7 +48,7 @@ Indicators Used:
   - EPS rating: FAILS (net income +3.1% < 20% minimum)
   - RS rating: FAILS (NOT in new high ground)
   - Base pattern: NONE (no tight closes, no coiling)
-  - Insider selling: CFO 80%, chairman $5.5M (strong distribution signal)
+  - Insider selling: CFO 0%, chairman $0.0M (strong distribution signal)
   - Distribution days: 6 in 22 sessions
   - Market regime: Correction (not confirmed uptrend)
 
@@ -60,7 +60,4 @@ Decision Tree Path:
   -> MARKET CHECK: 6 distribution days → CASH IS KING
 
 Sources Cited:
-  - *Synthesis:* "Cut your losers like a cancer. If a stock isn't acting right, get rid of it immediately." The people who know this business best are getting rid of it. That's not a subtle signal.
-  - *Synthesis:* "Sitting is more important than thinking." Even if SN were a perfect setup (it's not), the market environment says sit on your hands. "The trend is your friend until the 50-day breaks. Then it's not."
-  - *Synthesis:* "The 85-85 screen (EPS 85+ and RS 85+) is my starting point every morning. That filters out 95% of garbage." SN doesn't pass the first filter. I'd never see this stock in my daily workflow.
 ========================================================================

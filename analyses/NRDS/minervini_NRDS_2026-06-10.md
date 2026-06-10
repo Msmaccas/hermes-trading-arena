@@ -20,7 +20,7 @@ REASONING (each bullet = verbatim quote):
 
 [1] "I define a VCP as a series of contractions where each correction wave shows less price range and less overall volatility than the previous wave."
     Source: Trade Like a Stock Market Wizard (2013, HarperCollins), Ch. 6
-    => SN shows NO identifiable VCP pattern. Correction waves are expanding, not contracting. Margins compressing, inventory growing. The 'contractions' are getting WORSE, not better. No VCP = no SEPA setup.
+    => {d['ticker']} shows NO identifiable VCP pattern. Correction waves are expanding, not contracting. Margins compressing, inventory growing. The 'contractions' are getting WORSE, not better. No VCP = no SEPA setup.
 
 [2] "The narrower the base and the lower the volume, the more explosive the breakout."
     Source: Mindset, Methods, and Market Strategies (2022)
@@ -28,11 +28,11 @@ REASONING (each bullet = verbatim quote):
 
 [3] "The secret to compounding is not big winners — it's not having big losers. Protect the downside and the upside takes care of itself."
     Source: Mindset, Methods, and Market Strategies (2022)
-    => CFO sold 80% of holdings. Chairman sold $5.5M secondary. 1.8M recalled units. 2 class actions. Net income only +3.1% on +15.6% revenue. This is a litany of downside risks. Protecting the downside means AVOIDING this stock entirely.
+    => f'CFO sold 0% of holdings. Chairman sold $0.0M secondary. 0.0M recalled units. 0 class actions. Net income only +6.2% on +6.2% revenue. This is a litany of downside risks. Protecting the downside means AVOIDING this stock entirely.
 
 [4] "When the market is in a confirmed uptrend, be fully invested. When it's not, sit on your hands. It's that simple — but the hardest thing to do."
     Source: Mindset, Methods, and Market Strategies (2022)
-    => Market has 6 distribution days in 22 sessions. No follow-through day confirmed. Market is NOT in a confirmed uptrend. Progressive exposure says sit at 0-25% maximum. And even then, you need a valid setup.
+    => f'Market has {d['distribution_days']} distribution days in {d['distribution_days_period']}. No follow-through day confirmed. Market is NOT in a confirmed uptrend. Progressive exposure says sit at 0-25% maximum. And even then, you need a valid setup.
 
 [5] "If I can do it, anybody can. I started with nothing, failed for years, and figured it out through discipline and process."
     Source: YouTube: https://youtube.com/@markminervini
@@ -43,9 +43,9 @@ VERDICT: SELL. Conviction: 0.8.
 Indicators Used:
   - VCP pattern: NOT PRESENT
   - RS line: NOT in new high ground
-  - Insider selling: CFO 80%, chairman $5.5M
+  - Insider selling: CFO 0%, chairman $0.0M
   - Product recall: 1.8M units
-  - Net margin decline: -100bps to 8.6%
+  - Net margin decline: +0bps to 0.0%
   - Distribution days: 6 in 22 sessions
   - Market regime: Correction
 
@@ -56,5 +56,4 @@ Decision Tree Path:
   -> MARKET CHECK: 6 distribution days → SIT ON HANDS
 
 Sources Cited:
-  - *Synthesis:* "The narrower the base and the lower the volume, the more explosive the breakout." Without RS line in new high ground before price, the breakout power is severely diminished. This stock has no breakout power.
 ========================================================================

@@ -32,7 +32,7 @@ REASONING (each bullet = verbatim quote):
 
 [4] "The best trades are obvious. If you're debating whether to take it, it's not a good trade."
     Source: YouTube (Chat With Traders): https://www.youtube.com/watch?v=lgF76j64xHs
-    => CFO sold 80%, chairman $5.5M secondary, 1.8M recalled, 2 class actions, tariffs, margin compression. If you need to convince yourself this is a good trade through all that noise, IT IS NOT A GOOD TRADE.
+    => f'CFO sold 80%, chairman $5.5M secondary, 1.8M recalled, 2 class actions, tariffs, margin compression. If you need to convince yourself this is a good trade through all that noise, IT IS NOT A GOOD TRADE.
 
 [5] "The setup does not care about your opinion."
     Source: qullamaggie.com: https://qullamaggie.com/
@@ -51,6 +51,4 @@ Decision Tree Path:
   -> SETUP 3: PARABOLIC SHORT — FAIL (no vertical move)
 
 Sources Cited:
-  - *Synthesis:* "I only trade the three setups. If it's not one of them, I don't touch it." SN fails all three. This is not a judgment of the company — it's a simple mechanical filter that says pass.
-  - *Synthesis:* "Stocks that are breaking out to new highs after a long consolidation have the least resistance above them." No prior run means no consolidation setup. The stock hasn't earned a breakout.
 ========================================================================

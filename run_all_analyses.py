@@ -72,14 +72,8 @@ def save_individual(analysis: pe.PersonaAnalysis, stock_data: dict, persona_key:
         "---\n"
     )
 
-    # Full analysis body — temporarily patch pe.sn_data so format_analysis
-    # picks up the correct price for this stock
-    orig_sn_data = pe.sn_data
-    pe.sn_data = stock_data
-    try:
-        body = pe.format_analysis(analysis)
-    finally:
-        pe.sn_data = orig_sn_data
+    # Full analysis body
+    body = pe.format_analysis(analysis)
 
     filename = f"{persona_key}_{ticker}_{analysis.date}.md"
     filepath = os.path.join(ticker_dir, filename)

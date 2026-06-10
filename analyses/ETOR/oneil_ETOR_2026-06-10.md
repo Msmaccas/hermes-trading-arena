@@ -20,15 +20,15 @@ REASONING (each bullet = verbatim quote):
 
 [1] "In CANSLIM, the 'M' is the most important letter. Most investors lose money not because they buy bad stocks, but because they buy good stocks in a bad market."
     Source: IBD Website: https://www.investors.com/ibd-university/market-direction/
-    => 6 distribution days in 22 sessions. Market is in correction. 'M' alone demands we stop here. DO NOT BUY in this environment.
+    => f'M' — 6 distribution days in 22 sessions. Market is in correction. 'M' alone demands we stop here. DO NOT BUY in this environment.
 
 [2] "Current Quarterly Earnings per Share: The Higher, the Better."
     Source: How to Make Money in Stocks (4th ed.), CAN SLIM introduction [p.15]
-    => Net income growth +3.1% per Q1 2026 filings. CANSLIM requires 20% MINIMUM. Even using revenue growth of +15.6%, ideal is 40-100-200%. SN fails 'C' completely.
+    => f'Net income growth +-35.6% per current period filings. CANSLIM requires 20% MINIMUM. Even using revenue growth of +-35.6%, ideal is 40-100-200%. ETOR fails 'C' completely.
 
 [3] "Annual Earnings Increases: Look for Significant Growth."
     Source: How to Make Money in Stocks (4th ed.), CAN SLIM introduction [p.15]
-    => Revenue +15.6% while net income +3.1% means costs are spiraling. CANSLIM requires 25% minimum sales growth. This stock is growing revenue but not profits — that's a warning, not a signal.
+    => f'Revenue +-35.6% while net income +-35.6% means costs are spiraling. CANSLIM requires 25% minimum sales growth. This stock is growing revenue but not profits — that's a warning, not a signal.
 
 [4] "Don't buy a stock because of its dividend or its P/E ratio. Buy it because it's the number one company in its particular field in terms of earnings and sales growth, ROE, profit margins, and product superiority."
     Source: How to Make Money in Stocks (4th ed.), Ch.20 [p.431]
@@ -48,23 +48,23 @@ REASONING (each bullet = verbatim quote):
 
 [8] "The whole secret to winning big in the stock market is not to be right all the time, but to lose the least amount possible when you're wrong."
     Source: How to Make Money in Stocks (4th ed.), Ch.10 [p.247]
-    => If you already own SN, the 7-8% stop loss rule applies. If bought above $127, that stop has likely triggered. If not, the rule says cut it anyway given the distribution days.
+    => f'If you already own {d['ticker']}, the 7-8% stop loss rule applies. If bought near ${d['price']:.0f}, the stop may have triggered depending on your entry. If not, the rule says cut it anyway given the distribution days.
 
 VERDICT: SELL. Conviction: 0.9.
 
 Indicators Used:
   - Distribution days: 6 in 22 sessions
-  - EPS growth: +3.1% (requires 20% minimum)
-  - Sales growth: +15.6% (requires 25% minimum)
+  - EPS growth: +-35.6% (requires 20% minimum)
+  - Revenue growth: +-35.6% (requires 25% minimum)
   - P/E: 25.9x (sector avg: 12.6x)
   - CFO sold 80% of holdings
   - Chairman sold $5.5M via secondary
   - 39 categories, 25 new products/year
   - Food Prep category: -3.3%
-  - Product recall: 1.8M units
+  - Product recall: 0.0M units
   - Class actions: 2 active
   - Short seller: Grizzly Research (Aug 2024)
-  - Tariff exposure: 10% baseline
+  - Tariff exposure: 0% baseline
 
 Decision Tree Path:
   -> M CHECK: 6 distribution days >= 5 → RAISE CASH
@@ -75,7 +75,4 @@ Decision Tree Path:
   -> N CHECK: New products present but not transformative → MARGINAL
 
 Sources Cited:
-  - *Synthesis:* "Track what smart money does, not what they say." Insider selling of this magnitude suggests the people closest to the business see problems the street hasn't priced in.
-  - *Synthesis:* "M is the most important letter. Most investors lose money not because they buy bad stocks, but because they buy good stocks in a bad market." Even if SN passed CANSLIM (it doesn't), the market alone says stay in cash.
-  - *Derived from:* EPS growth <20%, sales growth <25%, margins compressing, P/E > market.
 ========================================================================

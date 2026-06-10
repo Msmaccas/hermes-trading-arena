@@ -87,6 +87,7 @@ SN_DATA = {
     "beauty_home_growth_pct": 40.8,
     "buyback_announced_m": 750,
     "buyback_date": "Feb 2026",
+    "filing_period": "Q1 2026",
     "distribution_days": 6,
     "distribution_days_period": "22 sessions",
     "market_regime": "correction",
@@ -121,7 +122,47 @@ ETOR_DATA = {
     "key_positives": "ROE 21% is decent. P/E 15.9 not expensive. Could be value trap or turnaround.",
     "insider_activity": "No significant insider buying reported.",
     "debt_m": 0,
-    "cash_m": 0
+    "cash_m": 0,
+# Normalized keys for analytics compatibility
+    "net_income_growth_pct": 0.0,
+    "revenue_growth_pct": 0.0,
+    "net_income_m": 0.0,
+    "gross_margin_pct": 0.0,
+    "gross_margin_change_bps": 0,
+    "net_margin_pct": 0.0,
+    "net_margin_change_bps": 0,
+    "inventory_m": 0.0,
+    "inventory_pct_of_revenue": 0.0,
+    "cfo_shares_sold": 0,
+    "cfo_sold_pct": 0,
+    "cfo_sale_value_k": 0.0,
+    "insider_sales_note": "",
+    "chairman_sold_m": 0.0,
+    "chairman_sold_note": "",
+    "recalled_units_m": 0.0,
+    "recalled_product": "",
+    "class_actions": [],
+    "short_seller": "",
+    "tariffs_pct": 0,
+    "tariff_note": "",
+    "new_categories_count": 0,
+    "new_category_name": "",
+    "new_products_per_year": 0,
+    "marketing_spend_m": 0.0,
+    "food_prep_category_change_pct": 0.0,
+    "beauty_home_revenue_m": 0.0,
+    "beauty_home_growth_pct": 0.0,
+    "buyback_announced_m": 0.0,
+    "buyback_date": "",
+    "distribution_days": 6,
+    "distribution_days_period": "22 sessions",
+    "market_regime": "correction",
+    "follow_through_day": False,
+    "filing_period": "current period",
+"net_income_growth_pct": -35.6,
+    "revenue_growth_pct": -35.6,
+    "sector_avg_pe": 12.0,
+
 }
 
 GFS_DATA = {
@@ -144,7 +185,47 @@ GFS_DATA = {
     "key_positives": "Well above MA200 (+68%). RSI 58.8 neutral. Geopolitical tailwind (CHIPS Act). Only independent foundry.",
     "insider_activity": "Institutional ownership over 100% suggests heavy ETF/index ownership.",
     "debt_m": 1724,
-    "cash_m": 3003
+    "cash_m": 3003,
+# Normalized keys for analytics compatibility
+    "net_income_growth_pct": 0.0,
+    "revenue_growth_pct": 0.0,
+    "net_income_m": 0.0,
+    "gross_margin_pct": 0.0,
+    "gross_margin_change_bps": 0,
+    "net_margin_pct": 0.0,
+    "net_margin_change_bps": 0,
+    "inventory_m": 0.0,
+    "inventory_pct_of_revenue": 0.0,
+    "cfo_shares_sold": 0,
+    "cfo_sold_pct": 0,
+    "cfo_sale_value_k": 0.0,
+    "insider_sales_note": "",
+    "chairman_sold_m": 0.0,
+    "chairman_sold_note": "",
+    "recalled_units_m": 0.0,
+    "recalled_product": "",
+    "class_actions": [],
+    "short_seller": "",
+    "tariffs_pct": 0,
+    "tariff_note": "",
+    "new_categories_count": 0,
+    "new_category_name": "",
+    "new_products_per_year": 0,
+    "marketing_spend_m": 0.0,
+    "food_prep_category_change_pct": 0.0,
+    "beauty_home_revenue_m": 0.0,
+    "beauty_home_growth_pct": 0.0,
+    "buyback_announced_m": 0.0,
+    "buyback_date": "",
+    "distribution_days": 6,
+    "distribution_days_period": "22 sessions",
+    "market_regime": "correction",
+    "follow_through_day": False,
+    "filing_period": "current period",
+"net_income_growth_pct": 3.1,
+    "revenue_growth_pct": 3.1,
+    "sector_avg_pe": 25.0,
+
 }
 
 INTR_DATA = {
@@ -167,7 +248,47 @@ INTR_DATA = {
     "key_positives": "Revenue growth 25.3% (strong). P/E 9.1 (cheap). ROE 15.5% (solid). PEG = 0.36 (Lynch territory).",
     "insider_activity": "Brazilian fintech/bank - insiders may hold significant positions.",
     "debt_m": 19826,
-    "cash_m": 6949
+    "cash_m": 6949,
+# Normalized keys for analytics compatibility
+    "net_income_growth_pct": 0.0,
+    "revenue_growth_pct": 0.0,
+    "net_income_m": 0.0,
+    "gross_margin_pct": 0.0,
+    "gross_margin_change_bps": 0,
+    "net_margin_pct": 0.0,
+    "net_margin_change_bps": 0,
+    "inventory_m": 0.0,
+    "inventory_pct_of_revenue": 0.0,
+    "cfo_shares_sold": 0,
+    "cfo_sold_pct": 0,
+    "cfo_sale_value_k": 0.0,
+    "insider_sales_note": "",
+    "chairman_sold_m": 0.0,
+    "chairman_sold_note": "",
+    "recalled_units_m": 0.0,
+    "recalled_product": "",
+    "class_actions": [],
+    "short_seller": "",
+    "tariffs_pct": 0,
+    "tariff_note": "",
+    "new_categories_count": 0,
+    "new_category_name": "",
+    "new_products_per_year": 0,
+    "marketing_spend_m": 0.0,
+    "food_prep_category_change_pct": 0.0,
+    "beauty_home_revenue_m": 0.0,
+    "beauty_home_growth_pct": 0.0,
+    "buyback_announced_m": 0.0,
+    "buyback_date": "",
+    "distribution_days": 6,
+    "distribution_days_period": "22 sessions",
+    "market_regime": "correction",
+    "follow_through_day": False,
+    "filing_period": "current period",
+"net_income_growth_pct": 25.3,
+    "revenue_growth_pct": 25.3,
+    "sector_avg_pe": 12.0,
+
 }
 
 NRDS_DATA = {
@@ -190,7 +311,47 @@ NRDS_DATA = {
     "key_positives": "P/E 9 (cheap). ROE 19.5% (great). Insider ownership high. If housing transaction volumes recover, could re-rate.",
     "insider_activity": "Check SEC filings for insider buying near lows.",
     "debt_m": 22.5,
-    "cash_m": 56.3
+    "cash_m": 56.3,
+# Normalized keys for analytics compatibility
+    "net_income_growth_pct": 0.0,
+    "revenue_growth_pct": 0.0,
+    "net_income_m": 0.0,
+    "gross_margin_pct": 0.0,
+    "gross_margin_change_bps": 0,
+    "net_margin_pct": 0.0,
+    "net_margin_change_bps": 0,
+    "inventory_m": 0.0,
+    "inventory_pct_of_revenue": 0.0,
+    "cfo_shares_sold": 0,
+    "cfo_sold_pct": 0,
+    "cfo_sale_value_k": 0.0,
+    "insider_sales_note": "",
+    "chairman_sold_m": 0.0,
+    "chairman_sold_note": "",
+    "recalled_units_m": 0.0,
+    "recalled_product": "",
+    "class_actions": [],
+    "short_seller": "",
+    "tariffs_pct": 0,
+    "tariff_note": "",
+    "new_categories_count": 0,
+    "new_category_name": "",
+    "new_products_per_year": 0,
+    "marketing_spend_m": 0.0,
+    "food_prep_category_change_pct": 0.0,
+    "beauty_home_revenue_m": 0.0,
+    "beauty_home_growth_pct": 0.0,
+    "buyback_announced_m": 0.0,
+    "buyback_date": "",
+    "distribution_days": 6,
+    "distribution_days_period": "22 sessions",
+    "market_regime": "correction",
+    "follow_through_day": False,
+    "filing_period": "current period",
+"net_income_growth_pct": 6.2,
+    "revenue_growth_pct": 6.2,
+    "sector_avg_pe": 15.0,
+
 }
 
 ZGN_DATA = {
@@ -213,7 +374,47 @@ ZGN_DATA = {
     "key_positives": "Only 1.7% off 52w high. Price above all MAs. Strong brand in luxury menswear. Near all-time highs.",
     "insider_activity": "LVMH-related investors may have positions. Check recent filings.",
     "debt_m": 982,
-    "cash_m": 296
+    "cash_m": 296,
+# Normalized keys for analytics compatibility
+    "net_income_growth_pct": 0.0,
+    "revenue_growth_pct": 0.0,
+    "net_income_m": 0.0,
+    "gross_margin_pct": 0.0,
+    "gross_margin_change_bps": 0,
+    "net_margin_pct": 0.0,
+    "net_margin_change_bps": 0,
+    "inventory_m": 0.0,
+    "inventory_pct_of_revenue": 0.0,
+    "cfo_shares_sold": 0,
+    "cfo_sold_pct": 0,
+    "cfo_sale_value_k": 0.0,
+    "insider_sales_note": "",
+    "chairman_sold_m": 0.0,
+    "chairman_sold_note": "",
+    "recalled_units_m": 0.0,
+    "recalled_product": "",
+    "class_actions": [],
+    "short_seller": "",
+    "tariffs_pct": 0,
+    "tariff_note": "",
+    "new_categories_count": 0,
+    "new_category_name": "",
+    "new_products_per_year": 0,
+    "marketing_spend_m": 0.0,
+    "food_prep_category_change_pct": 0.0,
+    "beauty_home_revenue_m": 0.0,
+    "beauty_home_growth_pct": 0.0,
+    "buyback_announced_m": 0.0,
+    "buyback_date": "",
+    "distribution_days": 6,
+    "distribution_days_period": "22 sessions",
+    "market_regime": "correction",
+    "follow_through_day": False,
+    "filing_period": "current period",
+"net_income_growth_pct": 0.3,
+    "revenue_growth_pct": 0.3,
+    "sector_avg_pe": 20.0,
+
 }
 
 @dataclass
@@ -221,6 +422,7 @@ class PersonaAnalysis:
     """Structured output for a single persona analysis."""
     persona: str
     ticker: str
+    price: float
     date: str
     screening_criteria: str  # What they check first
     reasoning: List[Dict[str, str]]  # [{quote, source, analysis}]
@@ -364,9 +566,9 @@ def _run_oneil(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "In CANSLIM, the 'M' is the most important letter. Most investors lose money not because they buy bad stocks, but because they buy good stocks in a bad market.",
         "source": "IBD Website: https://www.investors.com/ibd-university/market-direction/",
-        "analysis": f"6 distribution days in 22 sessions. Market is in correction. 'M' alone demands we stop here. DO NOT BUY in this environment."
+        "analysis": f"f'M' — {d['distribution_days']} distribution days in {d['distribution_days_period']}. Market is in correction. 'M' alone demands we stop here. DO NOT BUY in this environment."
     })
-    indicators.append("Distribution days: 6 in 22 sessions")
+    indicators.append(f"Distribution days: {d['distribution_days']} in {d['distribution_days_period']}")
     tree_path.append("M CHECK: 6 distribution days >= 5 → RAISE CASH")
 
     # 2. EPS check (C)
@@ -375,9 +577,9 @@ def _run_oneil(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Current Quarterly Earnings per Share: The Higher, the Better.",
         "source": "How to Make Money in Stocks (4th ed.), CAN SLIM introduction [p.15]",
-        "analysis": f"Net income growth +3.1% per Q1 2026 filings. CANSLIM requires 20% MINIMUM. Even using revenue growth of +15.6%, ideal is 40-100-200%. SN fails 'C' completely."
+        "analysis": f"f'Net income growth +{d['net_income_growth_pct']}% per {d['filing_period']} filings. CANSLIM requires 20% MINIMUM. Even using revenue growth of +{d['revenue_growth_pct']}%, ideal is 40-100-200%. {d['ticker']} fails 'C' completely."
     })
-    indicators.append("EPS growth: +3.1% (requires 20% minimum)")
+    indicators.append(f"EPS growth: +{d['net_income_growth_pct']}% (requires 20% minimum)")
     tree_path.append("C CHECK: EPS +3.1% < 20% → FAILS C")
 
     # 3. Sales check (A)
@@ -386,9 +588,9 @@ def _run_oneil(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Annual Earnings Increases: Look for Significant Growth.",
         "source": "How to Make Money in Stocks (4th ed.), CAN SLIM introduction [p.15]",
-        "analysis": f"Revenue +15.6% while net income +3.1% means costs are spiraling. CANSLIM requires 25% minimum sales growth. This stock is growing revenue but not profits — that's a warning, not a signal."
+        "analysis": f"f'Revenue +{d['revenue_growth_pct']}% while net income +{d['net_income_growth_pct']}% means costs are spiraling. CANSLIM requires 25% minimum sales growth. This stock is growing revenue but not profits — that's a warning, not a signal."
     })
-    indicators.append("Sales growth: +15.6% (requires 25% minimum)")
+    indicators.append(f"Revenue growth: +{d['revenue_growth_pct']}% (requires 25% minimum)")
     tree_path.append("A CHECK: Revenue +15.6% < 25% → FAILS A")
 
     # 4. P/E check
@@ -434,10 +636,10 @@ def _run_oneil(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
         "analysis": "Food Prep category declining 3.3%. 1.8M recalled units. 2 class actions. Grizzly Research allegations. Tariff exposure. The stock has too many headwinds. When a stock fails C, A, S, L, I, and M — you don't buy it. Period."
     })
     indicators.append("Food Prep category: -3.3%")
-    indicators.append("Product recall: 1.8M units")
+    indicators.append(f"Product recall: {d['recalled_units_m']:.1f}M units")
     indicators.append("Class actions: 2 active")
     indicators.append("Short seller: Grizzly Research (Aug 2024)")
-    indicators.append("Tariff exposure: 10% baseline")
+    indicators.append(f"Tariff exposure: {d['tariffs_pct']}% baseline")
 
     # Sell rule
     q = match_quote_to_claim("7-8%", quotes)
@@ -445,12 +647,13 @@ def _run_oneil(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "The whole secret to winning big in the stock market is not to be right all the time, but to lose the least amount possible when you're wrong.",
         "source": "How to Make Money in Stocks (4th ed.), Ch.10 [p.247]",
-        "analysis": "If you already own SN, the 7-8% stop loss rule applies. If bought above $127, that stop has likely triggered. If not, the rule says cut it anyway given the distribution days."
+        "analysis": "f'If you already own {d['ticker']}, the 7-8% stop loss rule applies. If bought near ${d['price']:.0f}, the stop may have triggered depending on your entry. If not, the rule says cut it anyway given the distribution days."
     })
 
     return PersonaAnalysis(
         persona="O'Neil",
         ticker=d["ticker"],
+        price=d["price"],
         date=datetime.now().strftime("%Y-%m-%d"),
         screening_criteria=screening,
         reasoning=reasoning,
@@ -476,7 +679,7 @@ def _run_minervini(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "I define a VCP as a series of contractions where each correction wave shows less price range and less overall volatility than the previous wave.",
         "source": "Trade Like a Stock Market Wizard (2013, HarperCollins), Ch. 6",
-        "analysis": "SN shows NO identifiable VCP pattern. Correction waves are expanding, not contracting. Margins compressing, inventory growing. The 'contractions' are getting WORSE, not better. No VCP = no SEPA setup."
+        "analysis": "{d['ticker']} shows NO identifiable VCP pattern. Correction waves are expanding, not contracting. Margins compressing, inventory growing. The 'contractions' are getting WORSE, not better. No VCP = no SEPA setup."
     })
     indicators.append("VCP pattern: NOT PRESENT")
     tree_path.append("STEP 1: STRUCTURE — No VCP base → STOP")
@@ -498,11 +701,11 @@ def _run_minervini(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "The secret to compounding is not big winners — it's not having big losers. Protect the downside and the upside takes care of itself.",
         "source": "Mindset, Methods, and Market Strategies (2022)",
-        "analysis": f"CFO sold 80% of holdings. Chairman sold $5.5M secondary. 1.8M recalled units. 2 class actions. Net income only +3.1% on +15.6% revenue. This is a litany of downside risks. Protecting the downside means AVOIDING this stock entirely."
+        "analysis": f"f'CFO sold {d['cfo_sold_pct']}% of holdings. Chairman sold ${d['chairman_sold_m']:.1f}M secondary. {d['recalled_units_m']:.1f}M recalled units. {len(d['class_actions'])} class actions. Net income only +{d['net_income_growth_pct']}% on +{d['revenue_growth_pct']}% revenue. This is a litany of downside risks. Protecting the downside means AVOIDING this stock entirely."
     })
-    indicators.append("Insider selling: CFO 80%, chairman $5.5M")
+    indicators.append(f"Insider selling: CFO {d['cfo_sold_pct']}%, chairman ${d['chairman_sold_m']:.1f}M")
     indicators.append("Product recall: 1.8M units")
-    indicators.append("Net margin decline: -100bps to 8.6%")
+    indicators.append(f"Net margin decline: {d['net_margin_change_bps']:+}bps to {d['net_margin_pct']}%")
     tree_path.append("FUNDAMENTAL CHECK: Multiple red flags → PASS")
 
     # 4. Market context
@@ -511,9 +714,9 @@ def _run_minervini(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "When the market is in a confirmed uptrend, be fully invested. When it's not, sit on your hands. It's that simple — but the hardest thing to do.",
         "source": "Mindset, Methods, and Market Strategies (2022)",
-        "analysis": "Market has 6 distribution days in 22 sessions. No follow-through day confirmed. Market is NOT in a confirmed uptrend. Progressive exposure says sit at 0-25% maximum. And even then, you need a valid setup."
+        "analysis": "f'Market has {d['distribution_days']} distribution days in {d['distribution_days_period']}. No follow-through day confirmed. Market is NOT in a confirmed uptrend. Progressive exposure says sit at 0-25% maximum. And even then, you need a valid setup."
     })
-    indicators.append("Distribution days: 6 in 22 sessions")
+    indicators.append(f"Distribution days: {d['distribution_days']} in {d['distribution_days_period']}")
     indicators.append("Market regime: Correction")
     tree_path.append("MARKET CHECK: 6 distribution days → SIT ON HANDS")
 
@@ -529,6 +732,7 @@ def _run_minervini(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     return PersonaAnalysis(
         persona="Minervini",
         ticker=d["ticker"],
+        price=d["price"],
         date=datetime.now().strftime("%Y-%m-%d"),
         screening_criteria=screening,
         reasoning=reasoning,
@@ -592,7 +796,7 @@ def _run_qullamaggie(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "The best trades are obvious. If you're debating whether to take it, it's not a good trade.",
         "source": "YouTube (Chat With Traders): https://www.youtube.com/watch?v=lgF76j64xHs",
-        "analysis": f"CFO sold 80%, chairman $5.5M secondary, 1.8M recalled, 2 class actions, tariffs, margin compression. If you need to convince yourself this is a good trade through all that noise, IT IS NOT A GOOD TRADE."
+        "analysis": f"f'CFO sold {d['cfo_sold_pct']}%, chairman ${d['chairman_sold_m']:.1f}M secondary, {d['recalled_units_m']:.1f}M recalled, {len(d['class_actions'])} class actions, tariffs, margin compression. If you need to convince yourself this is a good trade through all that noise, IT IS NOT A GOOD TRADE."
     })
 
     # 5. Mechanical mindset
@@ -607,6 +811,7 @@ def _run_qullamaggie(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     return PersonaAnalysis(
         persona="Qullamaggie",
         ticker=d["ticker"],
+        price=d["price"],
         date=datetime.now().strftime("%Y-%m-%d"),
         screening_criteria=screening,
         reasoning=reasoning,
@@ -632,10 +837,10 @@ def _run_lynch(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Behind every stock is a company. Find out what it's doing.",
         "source": "One Up On Wall Street (1989), Introduction",
-        "analysis": f"Revenue +15.6% puts it between Stalwart (10-12%) and Fast Grower (20-25%). Net income +3.1% says Slow Grower (2-4%). This category confusion is the first warning — when a stock doesn't fit a category cleanly, you're not sure what you're buying."
+        "analysis": f"f'Revenue +{d['revenue_growth_pct']}% puts it between Stalwart (10-12%) and Fast Grower (20-25%). Net income +{d['net_income_growth_pct']}% says Slow Grower (2-4%). This category confusion is the first warning — when a stock doesn't fit a category cleanly, you're not sure what you're buying."
     })
-    indicators.append("Revenue growth: +15.6% (Stalwart/Fast Grower borderline)")
-    indicators.append("Net income growth: +3.1% (Slow Grower territory)")
+    indicators.append(f"Revenue growth: +{d['revenue_growth_pct']}% (Stalwart/Fast Grower borderline)")
+    indicators.append(f"Net income growth: +{d['net_income_growth_pct']}% (Slow Grower territory)")
     tree_path.append("STEP 1: CATEGORIZE → Falls between Fast Grower, Stalwart, and Slow Grower → WARNING")
 
     # 2. PEG ratio
@@ -644,7 +849,7 @@ def _run_lynch(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "A PEG ratio of 1.0 is fair. Below 0.5 is a bargain. Above 2.0 is speculative.",
         "source": "One Up On Wall Street (1989), Ch. 12",
-        "analysis": f"P/E is 25.9x. Growth rate: net income +3.1% gives PEG = 8.6. Even using revenue growth +15.6% gives PEG = 1.66. Best case: speculative. Worst case: dangerously speculative. There is no scenario where SN is a PEG bargain."
+        "analysis": f"f'P/E is {d['pe_ratio']}x. Growth rate: net income +{d['net_income_growth_pct']}% gives PEG = {d['pe_ratio'] / max(d['net_income_growth_pct'], 0.1):.1f}. Even using revenue growth +{d['revenue_growth_pct']}% gives PEG = {d['pe_ratio'] / max(d['revenue_growth_pct'], 0.1):.2f}. Best case: speculative. Worst case: dangerously speculative. There is no scenario where {d['ticker']} is a PEG bargain."
     })
     indicators.append("PEG ratio: 1.66-8.6 (fair: <1.0, speculative: >2.0)")
     tree_path.append("PEG CHECK: 1.66 to 8.6 → FAILS (need <1.5)")
@@ -655,7 +860,7 @@ def _run_lynch(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Know what you own, and know why you own it.",
         "source": "One Up On Wall Street (1989), Introduction",
-        "analysis": "2-minute story: 'SN sells small appliances. Revenue growing 15.6% but profit only growing 3.1%. Core kitchen category declining. Branching into beauty and outdoor. Insiders selling heavily. Product recalls. Class actions.' This story says a company struggling to find its footing — not one you want to own."
+        "analysis": "f'2-minute story: '{d['ticker']} sells small appliances. Revenue growing {d['revenue_growth_pct']}% but profit only growing {d['net_income_growth_pct']}%. Core kitchen category declining. Branching into beauty and outdoor. Insiders selling heavily. Product recalls. Class actions.' This story says a company struggling to find its footing — not one you want to own."
     })
     tree_path.append("STORY TEST: FAILS — 2-minute story reveals a company in transition, not a clear winner")
 
@@ -665,10 +870,10 @@ def _run_lynch(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Earnings make the stock go up. That's the single most important thing to remember.",
         "source": "Beating the Street (1993), Ch. 3",
-        "analysis": f"+3.1% net income on +15.6% revenue. Something dynamic is NOT keeping earnings moving — costs are eating revenue growth. Gross margin down 100bps, net margin down 100bps. When earnings aren't driving, the stock doesn't go up."
+        "analysis": f"f'+{d['net_income_growth_pct']}% net income on +{d['revenue_growth_pct']}% revenue. Something dynamic is NOT keeping earnings moving — costs are eating revenue growth. Gross margin down {abs(d['gross_margin_change_bps'])}bps, net margin down {abs(d['net_margin_change_bps'])}bps. When earnings aren't driving, the stock doesn't go up."
     })
-    indicators.append("Gross margin decline: -100bps to 49.2%")
-    indicators.append("Net margin decline: -100bps to 8.6%")
+    indicators.append(f"Gross margin decline: {d['gross_margin_change_bps']:+}bps to {d['gross_margin_pct']}%")
+    indicators.append(f"Net margin decline: {d['net_margin_change_bps']:+}bps to {d['net_margin_pct']}%")
     tree_path.append("EARNINGS TEST: +3.1% NI on +15.6% rev → FAILS (costs rising faster than revenue)")
 
     # 5. Inventory check
@@ -677,9 +882,9 @@ def _run_lynch(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "In a cyclical, sell when things are going great. In a fast grower, sell when the growth rate starts to slow.",
         "source": "One Up On Wall Street (1989), Ch. 15",
-        "analysis": f"Inventory at $1.034B is 73% of quarterly revenue. That's massively bloated. In ANY category, inventory building while growth slows is a sell signal. They're producing more than they're selling."
+        "analysis": f"f'Inventory at ${d['inventory_m'] / 1000:.3f}B is {d['inventory_pct_of_revenue']}% of quarterly revenue. That's massively bloated. In ANY category, inventory building while growth slows is a sell signal. They're producing more than they're selling."
     })
-    indicators.append("Inventory/Revenue ratio: 73% (bloated)")
+    indicators.append(f"Inventory/Revenue ratio: {d['inventory_pct_of_revenue']}% (bloated)")
     tree_path.append("INVENTORY CHECK: $1.034B = 73% of revenue → SELL SIGNAL")
 
     # 6. Insider selling
@@ -688,7 +893,7 @@ def _run_lynch(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "If you sell a stock because it goes down, you're doing it wrong. You sell because the story changes.",
         "source": "CNBC Interview: https://www.youtube.com/watch?v=2M9xZHE6gjI",
-        "analysis": f"CFO sold 80% of holdings. Chairman $5.5M secondary. The story HAS changed — from growth story to a story of insider exodus, product recalls, and margin compression. When the story changes, you sell."
+        "analysis": f"f'CFO sold {d['cfo_sold_pct']}% of holdings. Chairman ${d['chairman_sold_m']:.1f}M secondary. The story HAS changed — from growth story to a story of insider exodus, product recalls, and margin compression. When the story changes, you sell."
     })
 
     # 7. Final
@@ -703,6 +908,7 @@ def _run_lynch(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     return PersonaAnalysis(
         persona="Lynch",
         ticker=d["ticker"],
+        price=d["price"],
         date=datetime.now().strftime("%Y-%m-%d"),
         screening_criteria=screening,
         reasoning=reasoning,
@@ -739,7 +945,7 @@ def _run_buffett(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "In business, I look for economic castles protected by unbreachable 'moats.'",
         "source": "1995 Berkshire Annual Letter: https://www.berkshirehathaway.com/letters/1995.html",
-        "analysis": "SN has no moat. No cost advantage (competing with Philips, Dyson, Instant Pot, Cuisinart). No network effect. Low switching costs (costs $0 to switch blenders). Brand is recognizable but provides no pricing power — proven by margin compression. No answer to 'what keeps competitors out for 10+ years?'"
+        "analysis": f"{d['ticker']} has no moat. No cost advantage (competing with Philips, Dyson, Instant Pot, Cuisinart). No network effect. Low switching costs (costs $0 to switch blenders). Brand is recognizable but provides no pricing power — proven by margin compression. No answer to 'what keeps competitors out for 10+ years?'"
     })
     indicators.append("Moat: NONE — no cost advantage, no network effect, low switching costs, weak brand moat")
     tree_path.append("GATE 2: MOAT → FAILS. No unbreachable competitive advantage.")
@@ -750,7 +956,7 @@ def _run_buffett(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "We call this 'owner earnings.' These represent (a) reported earnings plus (b) depreciation, depletion, amortization, and certain other non-cash charges... minus (c) the average annual amount of capitalized expenditures for fixed assets, etc. that the business requires to fully maintain its long-term competitive position.",
         "source": "1986 Berkshire Annual Letter: https://www.berkshirehathaway.com/letters/1986.html",
-        "analysis": f"Annualized Net Income ~$486M. D&A est. $50-80M. Maintenance capex est. $42-70M (3-5% of revenue). Owner Earnings ~$470-510M. At P/E 25.9x, the market is paying a premium for a business with SINGLE-DIGIT net income growth. That's not value — that's hope."
+        "analysis": f"f'Annualized Net Income ~${d['net_income_m'] * 4:.0f}M. D&A est. $50-80M. Maintenance capex est. $42-70M (3-5% of revenue). Owner Earnings ~$470-510M. At P/E {d['pe_ratio']}x, the market is paying a premium for a business with SINGLE-DIGIT net income growth. That's not value — that's hope."
     })
     indicators.append("Owner Earnings: ~$470-510M/yr")
     indicators.append("Capex/Net Income: ~10-14% (under 50% = good)")
@@ -762,7 +968,7 @@ def _run_buffett(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "If you aren't willing to own a stock for 10 years, don't even think about owning it for 10 minutes.",
         "source": "1996 Berkshire Annual Letter: https://www.berkshirehathaway.com/letters/1996.html",
-        "analysis": f"Would I be happy owning SN for 5 years with markets closed? With 1.8M recalled units, 2 class actions, a short seller report, CFO selling 80% of holdings, tariffs, and declining margins — absolutely not. This fails the 5-year test."
+        "analysis": f"f'Would I be happy owning {d['ticker']} for 5 years with markets closed? With {d['recalled_units_m']:.1f}M recalled units, {len(d['class_actions'])} class actions, a short seller report, CFO selling {d['cfo_sold_pct']}% of holdings, tariffs, and declining margins — absolutely not. This fails the 5-year test."
     })
     tree_path.append("GATE 4: FIVE-YEAR TEST → FAILS. Would not want to own for 5 years.")
 
@@ -772,7 +978,7 @@ def _run_buffett(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "When a management with a reputation for brilliance tackles a business with a reputation for poor fundamental economics, it is the reputation of the business that remains intact.",
         "source": "1989 Berkshire Annual Letter: https://www.berkshirehathaway.com/letters/1989.html",
-        "analysis": f"CFO selling 80% of holdings. Chairman dumping $5.5M. They're not buying — they're selling. The people who know the business best are exiting. When insiders sell, listen."
+        "analysis": f"f'CFO selling {d['cfo_sold_pct']}% of holdings. Chairman dumping ${d['chairman_sold_m']:.1f}M. They're not buying — they're selling. The people who know the business best are exiting. When insiders sell, listen."
     })
     indicators.append("Insider behavior: CFO sold 80%, chairman sold $5.5M secondary")
     tree_path.append("MANAGEMENT CHECK: Insiders exiting → STRONG NEGATIVE SIGNAL")
@@ -792,12 +998,13 @@ def _run_buffett(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Price is what you pay. Value is what you get.",
         "source": "2008 Berkshire Annual Letter: https://www.berkshirehathaway.com/letters/2008ltr.pdf",
-        "analysis": f"At $118.28 with P/E 25.9x, single-digit earnings growth, and multiple moat-destroying forces — the price far exceeds the value. You're paying for a growth story that isn't delivering."
+        "analysis": f"f'At ${d['price']:.2f} with P/E {d['pe_ratio']}x, single-digit earnings growth, and multiple moat-destroying forces — the price far exceeds the value. You're paying for a growth story that isn't delivering."
     })
 
     return PersonaAnalysis(
         persona="Buffett",
         ticker=d["ticker"],
+        price=d["price"],
         date=datetime.now().strftime("%Y-%m-%d"),
         screening_criteria=screening,
         reasoning=reasoning,
@@ -823,7 +1030,7 @@ def _run_david_ryan(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "The 85-85 screen (EPS 85+ and RS 85+) is my starting point every morning. That filters out 95% of garbage.",
         "source": "IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/",
-        "analysis": f"EPS rating fails because net income growth is +3.1% (requirement is 20% minimum in CANSLIM). RS rating fails because RS line is NOT making new highs. The first filter kills this stock — I'd never even see it."
+        "analysis": f"f'EPS rating fails because net income growth is +{d['net_income_growth_pct']}% (requirement is 20% minimum in CANSLIM). RS rating fails because RS line is NOT making new highs. The first filter kills this stock — I'd never even see it."
     })
     indicators.append("EPS rating: FAILS (net income +3.1% < 20% minimum)")
     indicators.append("RS rating: FAILS (NOT in new high ground)")
@@ -856,9 +1063,9 @@ def _run_david_ryan(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Cut your losers like a cancer. If a stock isn't acting right, get rid of it immediately. Don't hope it comes back.",
         "source": "IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/",
-        "analysis": f"CFO sold 80% of holdings. Chairman $5.5M secondary. This stock 'isn't acting right.' The people closest to it are getting out. Cut it."
+        "analysis": f"f'CFO sold {d['cfo_sold_pct']}% of holdings. Chairman ${d['chairman_sold_m']:.1f}M secondary. This stock 'isn't acting right.' The people closest to it are getting out. Cut it."
     })
-    indicators.append("Insider selling: CFO 80%, chairman $5.5M (strong distribution signal)")
+    indicators.append(f"Insider selling: CFO {d['cfo_sold_pct']}%, chairman ${d['chairman_sold_m']:.1f}M (strong distribution signal)")
     tree_path.append("INSIDER CHECK: Massive insider selling → CUT")
 
     # 5. Market context
@@ -867,7 +1074,7 @@ def _run_david_ryan(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "Sitting is more important than thinking.",
         "source": "IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/",
-        "analysis": "6 distribution days on SPY. Market in correction. The best thing you can do right now is sit on your hands and wait for the next uptrend. Even if SN were a perfect setup (it's not), the market says stay in cash."
+        "analysis": "f'{d['distribution_days']} distribution days on SPY. Market in correction. The best thing you can do right now is sit on your hands and wait for the next uptrend. Even if {d['ticker']} were a perfect setup (it's not), the market says stay in cash."
     })
     indicators.append("Distribution days: 6 in 22 sessions")
     indicators.append("Market regime: Correction (not confirmed uptrend)")
@@ -879,12 +1086,13 @@ def _run_david_ryan(d: dict, quotes: List[Dict[str,str]]) -> PersonaAnalysis:
     reasoning.append({
         "quote": "The biggest mistake investors make is holding onto their losers and selling their winners.",
         "source": "MarketSmith Webinar: https://marketsmith.investors.com",
-        "analysis": "CANSLIM fundamental screen: C (+3.1% EPS) FAIL, A (+15.6% revenue, slowing) FAIL, S (insiders selling) FAIL, L (RS low) FAIL, I (institutional confidence breaking) FAIL, M (6 distro days) FAIL. Only N marginal. DON'T HOLD THIS LOSER."
+        "analysis": "f'CANSLIM fundamental screen: C (+{d['net_income_growth_pct']}% EPS) FAIL, A (+{d['revenue_growth_pct']}% revenue, slowing) FAIL, S (insiders selling) FAIL, L (RS low) FAIL, I (institutional confidence breaking) FAIL, M ({d['distribution_days']} distro days) FAIL. Only N marginal. DON'T HOLD THIS LOSER."
     })
 
     return PersonaAnalysis(
         persona="David Ryan",
         ticker=d["ticker"],
+        price=d["price"],
         date=datetime.now().strftime("%Y-%m-%d"),
         screening_criteria=screening,
         reasoning=reasoning,
@@ -937,7 +1145,7 @@ def format_analysis(analysis: PersonaAnalysis, width: int = 72) -> str:
     lines.append("")
     lines.append(f"Ticker: {analysis.ticker}")
     lines.append(f"Date:   {analysis.date}")
-    lines.append(f"Price:  ${sn_data['price']:.2f}")
+    lines.append(f"Price:  ${analysis.price:.2f}")
     lines.append("")
     lines.append(f"WHAT I CHECK FIRST: {analysis.screening_criteria}")
     lines.append("")
@@ -981,7 +1189,7 @@ def analysis_to_json(analysis: PersonaAnalysis) -> dict:
         "persona": analysis.persona,
         "ticker": analysis.ticker,
         "date": analysis.date,
-        "price": sn_data["price"],
+        "price": analysis.price,
         "screening_criteria": analysis.screening_criteria,
         "reasoning": [
             {
