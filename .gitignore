@@ -1,8 +1,54 @@
-.env
-*.env.local
+# Python
 __pycache__/
 *.pyc
-.DS_Store
-screenshots/
-logs/
+*.pyo
+
+# Secrets / config
+.env
+*.env
+auth.json
+auth.lock
+config.yaml
+config.yml
+
+# State / DB
 *.db
+*.db-shm
+*.db-wal
+*.db-init.lock
+*.lock
+kanban.db*
+state.db*
+
+# Cache
+cache/
+audio_cache/
+image_cache/
+models_dev_cache.json
+desktop-build-stamp.json
+model_catalog.json
+
+# Logs
+logs/
+cron/
+hooks/
+memories/
+sessions/
+pairing/
+
+# Temp / artifacts
+state-snapshots/
+gateway_state.json
+channel_directory.json
+gateway.lock
+
+# Nested repos
+codex_workspace/
+
+# Binaries
+bin/
+
+# Orch engine files (they have their own home)
+orchestrator/
+orchestrator_README.md
+orchestrator_engine.py
