@@ -1,0 +1,113 @@
+//@version=5
+indicator(title="ONeil CANSLIM Pack", shorttitle="CANSLIM", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ONeil CANSLIM Indicator Pack
+//  - EMA20, SMA50, SMA200
+//  - RSI(14) with overbought/oversold labels
+//  - Volume vs 50d avg (%)
+//  - RS Line vs SPY (cumulative relative strength)
+//  - Distribution day counter (rolling 25-bar)
+//  - Pivot resistance detection
+//  - CANSLIM quick-score table
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+showMA       = input.bool(true,  "Show Moving Averages")
+showVolColor = input.bool(true,  "Color Bars on Heavy Volume")
+pivotLen     = input.int(10,     "Pivot Lookback (bars)", minval=5, maxval=50)
+distLookback = input.int(25,     "Distribution Day Window", minval=10, maxval=65)
+volThresh    = input.float(1.2,  "Volume Threshold for Dist Day", step=0.1, minval=1.0)
+
+// ─── RS Line (relative strength vs SPY, normalized to 100) ─────────────────
+spyClose = request.security("SPY", timeframe.period, close)
+var float rsLine = na
+rsRatio = close / spyClose
+if bar_index == 0
+    rsLine := 100
+else
+    rsLine := rsLine[1] * (rsRatio / rsRatio[1])
+rsSma50 = ta.sma(rsLine, 50)
+plot(rsLine,  "RS Line",    color.new(color.purple, 40), linewidth=1, display=display.none)
+plot(rsSma50, "RS SMA(50)", color.new(color.purple, 25), linewidth=1, display=display.none)
+
+// ─── Moving Averages ───────────────────────────────────────────────────────
+ema20  = ta.ema(close, 20)
+sma50  = ta.sma(close, 50)
+sma200 = ta.sma(close, 200)
+
+plot(ema20,  "EMA(20)",  color.blue,   showMA ? 2 : 0)
+plot(sma50,  "SMA(50)",  color.orange, showMA ? 1 : 0)
+plot(sma200, "SMA(200)", color.red,    showMA ? 1 : 0)
+
+// ─── RSI(14) — labels at cross of 70/30 thresholds ─────────────────────────
+rsiVal = ta.rsi(close, 14)
+plotshape(rsiVal >= 70 and rsiVal[1] < 70, "Overbought",
+          shape.triangledown, location.top,    color.new(color.red,   55), size.tiny)
+plotshape(rsiVal <= 30 and rsiVal[1] > 30, "Oversold",
+          shape.triangleup,   location.bottom, color.new(color.lime,  55), size.tiny)
+
+// ─── Volume ────────────────────────────────────────────────────────────────
+vol50Avg = ta.sma(volume, 50)
+volRatio = volume / vol50Avg * 100  // percent of 50d average
+
+// ─── Distribution Days (rolling count) ──────────────────────────────────────
+// A distribution day = down day on above-average volume
+var int rollingDist = 0
+if barstate.islast
+    cnt = 0
+    for i = 0 to distLookback - 1
+        if close[i] < close[i + 1] and volume[i] > ta.sma(volume, 50)[i] * volThresh
+            cnt += 1
+    rollingDist := cnt
+
+// ─── Pivot Resistance (nearest swing high above current price) ──────────────
+var float pivotPrice = na
+if barstate.islast
+    float nearest = na
+    for i = 0 to 500
+        ph = ta.pivothigh(high, pivotLen, pivotLen)[i]
+        if not na(ph) and ph > close and (na(nearest) or ph < nearest)
+            nearest := ph
+    pivotPrice := nearest
+
+// ─── CANSLIM Quick-Score Table (2 cols x 10 rows) ─────────────────────────
+var table t = table.new(position.bottom_right, 2, 10,
+                        bgcolor=color.new(color.white, 90),
+                        border_width=1, border_color=color.gray)
+
+if barstate.islast
+    // Sub-scores (each 1–5)
+    cScore = rsiVal > 60 ? 5 : rsiVal > 45 ? 3 : 1
+    aScore = close > sma200 ? 5 : close > sma50 ? 3 : 1
+    yrH    = ta.highest(high, 252)
+    nScore = close >= yrH * 0.90 ? 5 : close >= yrH * 0.75 ? 3 : 1
+    sScore = volRatio > 150 ? 5 : volRatio > 110 ? 4 : volRatio > 80 ? 3 : 1
+    lScore = rsLine > rsSma50 ? 4 : 2
+    iScore = volRatio > 100 ? 4 : 2
+    mScore = rollingDist <= 3 ? 5 : rollingDist <= 5 ? 4 : rollingDist <= 8 ? 3 : 1
+
+    total = cScore + aScore + nScore + sScore + lScore + iScore + mScore
+
+    table.cell(t, 0, 0, "CANSLIM",  text_color=color.white, bgcolor=color.navy, text_size=size.small)
+    table.cell(t, 1, 0, str.tostring(total) + "/33", text_color=color.white, bgcolor=color.navy, text_size=size.small)
+
+    table.cell(t, 0, 1, "Vol%",                                                                    text_size=size.small)
+    table.cell(t, 1, 1, str.tostring(int(volRatio)) + "%",                                         text_size=size.small)
+    table.cell(t, 0, 2, "RS Line",                                                                 text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(rsLine, "#.##"),                                              text_size=size.small)
+    table.cell(t, 0, 3, "Dist Days",                                                               text_size=size.small)
+    table.cell(t, 1, 3, str.tostring(rollingDist) + "/" + str.tostring(distLookback),              text_size=size.small)
+
+    if not na(pivotPrice)
+        table.cell(t, 0, 4, "Pivot ↑", text_color=color.yellow,                                   text_size=size.small)
+        table.cell(t, 1, 4, "$" + str.tostring(pivotPrice, "#.##"), text_color=color.yellow,                       text_size=size.small)
+
+    // Compact score breakdown row
+    table.cell(t, 0, 5, "C " + str.tostring(cScore) + " · N " + str.tostring(nScore) + " · S " + str.tostring(sScore), text_size=size.tiny)
+    table.cell(t, 1, 5, "A " + str.tostring(aScore) + " · L " + str.tostring(lScore),                                  text_size=size.tiny)
+    table.cell(t, 0, 6, "I " + str.tostring(iScore) + " · M " + str.tostring(mScore),                                  text_size=size.tiny)
+    table.cell(t, 1, 6, "RSI " + str.tostring(rsiVal, "#.#"),                                                          text_size=size.tiny)
+
+    // Bar colouring for heavy accumulation
+    barcolor(showVolColor and volRatio > 130 ? color.new(color.lime, 78) : na)

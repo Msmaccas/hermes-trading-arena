@@ -1,0 +1,144 @@
+//@version=5
+indicator(title="Qullamaggie Momentum/EP Pack", shorttitle="MOM/EP", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Qullamaggie Momentum / EP Indicator Pack
+//  - RSI(14)
+//  - ATR(14) with ADR% (Average Daily Range %)
+//  - EMA10, EMA20
+//  - Gap detection (open vs prior close %)
+//  - Fib extension levels (1.618, 2.618, 4.236)
+//  - Volume ratio vs 20d avg
+//  - ADR%, Gap%, Fib targets label + table
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+showMA        = input.bool(true,  "Show Moving Averages")
+fibLookback   = input.int(50,     "Fib Swing Lookback", minval=10, maxval=250)
+showFibLevels = input.bool(true,  "Show Fib Extension Levels")
+gapThreshold  = input.float(2.0,  "Gap % Threshold", step=0.5)
+
+// ─── RS Line vs SPY ────────────────────────────────────────────────────────
+spyClose = request.security("SPY", timeframe.period, close)
+var float rsLine = na
+rsRatio = close / spyClose
+if bar_index == 0
+    rsLine := 100
+else
+    rsLine := rsLine[1] * (rsRatio / rsRatio[1])
+plot(rsLine, "RS Line", color.new(color.purple, 40), linewidth=1, display=display.none)
+
+// ─── Moving Averages ───────────────────────────────────────────────────────
+ema10 = ta.ema(close, 10)
+ema20 = ta.ema(close, 20)
+plot(ema10, "EMA(10)", color.blue,   showMA ? 2 : 0)
+plot(ema20, "EMA(20)", color.orange, showMA ? 2 : 0)
+
+// ─── RSI(14) ───────────────────────────────────────────────────────────────
+rsiVal = ta.rsi(close, 14)
+
+// ─── ATR & ADR% ────────────────────────────────────────────────────────────
+atr14 = ta.atr(14)
+adrPct = atr14 / close * 100
+
+// ─── Gap Detection ─────────────────────────────────────────────────────────
+gapPct = (open - close[1]) / close[1] * 100
+isGap  = math.abs(gapPct) >= gapThreshold
+
+// ─── Volume ────────────────────────────────────────────────────────────────
+vol20Avg = ta.sma(volume, 20)
+volRatio = volume / vol20Avg * 100
+
+// ─── Fib Extension Levels ─────────────────────────────────────────────────
+// Find last swing low → swing high within lookback
+var float fib1618 = na
+var float fib2618 = na
+var float fib4236 = na
+
+if barstate.islast
+    // Find the most recent significant swing low and high
+    float swingLow  = na
+    float swingHigh = na
+    int   slIdx     = -1
+    int   shIdx     = -1
+
+    // Scan backwards: find pivot low, then pivot high before it
+    for i = 0 to fibLookback
+        pl = ta.pivotlow(low, 5, 5)[i]
+        if not na(pl)
+            swingLow := pl
+            slIdx    := i
+            // Now find a pivot high after this low
+            for j = i - 1 to 0
+                ph = ta.pivothigh(high, 5, 5)[j]
+                if not na(ph) and ph > swingLow
+                    swingHigh := ph
+                    shIdx     := j
+                    break
+            if not na(swingHigh)
+                break
+
+    if not na(swingLow) and not na(swingHigh) and swingHigh > swingLow
+        range_ = swingHigh - swingLow
+        fib1618 := swingLow + range_ * 1.618
+        fib2618 := swingLow + range_ * 2.618
+        fib4236 := swingLow + range_ * 4.236
+
+// ─── Plot Fib Levels ─────────────────────────────────────────────────────
+plot(showFibLevels and not na(fib1618) ? fib1618 : na,
+     "Fib 1.618", color.new(color.blue,  60), linewidth=1, style=plot.style_line)
+plot(showFibLevels and not na(fib2618) ? fib2618 : na,
+     "Fib 2.618", color.new(color.orange,60), linewidth=1, style=plot.style_line)
+plot(showFibLevels and not na(fib4236) ? fib4236 : na,
+     "Fib 4.236", color.new(color.red,   60), linewidth=1, style=plot.style_line)
+
+// ─── Chart Label (ADR, Gap, Fib target) ──────────────────────────────────
+var label infoLabel = na
+if barstate.islast
+    label.delete(infoLabel)
+    txt = "ADR " + str.tostring(adrPct, "#.##") + "%"
+    if math.abs(gapPct) >= 0.5
+        txt += " | Gap " + str.tostring(gapPct, "#.##") + "%"
+    if not na(fib1618)
+        txt += " | 1.618: " + str.tostring(fib1618, "#.##")
+    infoLabel := label.new(x=bar_index, y=na,
+                           text=txt, style=label.style_label_left,
+                           color=color.new(color.blue, 50), textcolor=color.white,
+                           size=size.small, yloc=yloc.abovebar)
+
+// ─── Gap labels ──────────────────────────────────────────────────────────
+plotshape(isGap and gapPct > 0, "Gap Up",   shape.triangleup,   location.belowbar, color.new(color.green, 60), size.tiny)
+plotshape(isGap and gapPct < 0, "Gap Down",  shape.triangledown, location.abovebar, color.new(color.red,   60), size.tiny)
+
+// ─── Momentum Table ──────────────────────────────────────────────────────
+var table t = table.new(position.bottom_right, 2, 9,
+                        bgcolor=color.new(color.white, 90),
+                        border_width=1, border_color=color.gray)
+
+if barstate.islast
+    table.cell(t, 0, 0, "Momentum/EP",        text_color=color.white, bgcolor=color.navy,     text_size=size.small)
+    table.cell(t, 1, 0, "Data",                text_color=color.white, bgcolor=color.navy,     text_size=size.small)
+
+    table.cell(t, 0, 1, "RSI(14)",                                                                text_size=size.small)
+    table.cell(t, 1, 1, str.tostring(rsiVal, "#.#"),                                              text_size=size.small)
+    table.cell(t, 0, 2, "ADR%",                                                                   text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(adrPct, "#.##") + "%",                                      text_size=size.small)
+    table.cell(t, 0, 3, "Gap%",                                                                   text_size=size.small)
+    table.cell(t, 1, 3, str.tostring(gapPct, "#.##") + "%",                                      text_size=size.small)
+    table.cell(t, 0, 4, "Vol Ratio",                                                              text_size=size.small)
+    table.cell(t, 1, 4, str.tostring(volRatio, "#.#") + "%",                                     text_size=size.small)
+    table.cell(t, 0, 5, "ATR(14)",                                                                text_size=size.small)
+    table.cell(t, 1, 5, str.tostring(atr14, "#.##"),                                              text_size=size.small)
+
+    if not na(fib1618)
+        table.cell(t, 0, 6, "Fib 1.618", text_color=color.blue,                                  text_size=size.small)
+        table.cell(t, 1, 6, str.tostring(fib1618, "#.##"),                                        text_size=size.small)
+    if not na(fib2618)
+        table.cell(t, 0, 7, "Fib 2.618", text_color=color.orange,                                text_size=size.small)
+        table.cell(t, 1, 7, str.tostring(fib2618, "#.##"),                                        text_size=size.small)
+    if not na(fib4236)
+        table.cell(t, 0, 8, "Fib 4.236", text_color=color.red,                                   text_size=size.small)
+        table.cell(t, 1, 8, str.tostring(fib4236, "#.##"),                                        text_size=size.small)
+
+    // Volume bar colour
+    barcolor(volRatio > 150 ? color.new(color.lime, 78) : na)

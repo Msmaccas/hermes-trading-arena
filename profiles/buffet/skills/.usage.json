@@ -1,0 +1,15 @@
+{
+  "kanban-worker": {
+    "archived_at": null,
+    "created_at": "2026-06-06T18:35:44.413028+00:00",
+    "created_by": null,
+    "last_patched_at": null,
+    "last_used_at": "2026-06-06T18:35:44.413038+00:00",
+    "last_viewed_at": null,
+    "patch_count": 0,
+    "pinned": false,
+    "state": "active",
+    "use_count": 1,
+    "view_count": 0
+  }
+}

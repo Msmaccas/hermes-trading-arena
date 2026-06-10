@@ -1,0 +1,113 @@
+//@version=5
+indicator(title="Minervini VCP/SEPA Pack", shorttitle="VCP/SEPA", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Minervini VCP / SEPA Indicator Pack
+//  - RSI(14)
+//  - EMA10, EMA20, SMA50
+//  - ATR(14) trailing with VCP tightening ratio
+//  - Volume vs 50d avg (%)
+//  - RS Line vs SPY
+//  - Shakeout detection
+//  - VCP Tightening % label + table
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+showMA    = input.bool(true,  "Show Moving Averages")
+atrLen    = input.int(14,     "ATR Length", minval=5)
+vcpLook   = input.int(10,     "VCP Lookback (bars for avg ATR)", minval=5)
+shakeLen1 = input.int(10,     "Shakeout Lookback L (bars)", minval=5)
+shakeLen2 = input.int(5,      "Shakeout Recovery (bars)",    minval=2)
+
+// ─── RS Line vs SPY ────────────────────────────────────────────────────────
+spyClose = request.security("SPY", timeframe.period, close)
+var float rsLine = na
+rsRatio = close / spyClose
+if bar_index == 0
+    rsLine := 100
+else
+    rsLine := rsLine[1] * (rsRatio / rsRatio[1])
+rsSma20 = ta.sma(rsLine, 20)
+plot(rsLine,   "RS Line",      color.new(color.purple, 35), linewidth=1, display=display.none)
+plot(rsSma20,  "RS SMA(20)",   color.new(color.purple, 20), linewidth=1, display=display.none)
+
+// ─── Moving Averages ───────────────────────────────────────────────────────
+ema10 = ta.ema(close, 10)
+ema20 = ta.ema(close, 20)
+sma50 = ta.sma(close, 50)
+
+plot(ema10, "EMA(10)", color.blue,   showMA ? 2 : 0)
+plot(ema20, "EMA(20)", color.orange, showMA ? 2 : 0)
+plot(sma50, "SMA(50)", color.red,    showMA ? 1 : 0)
+
+// ─── RSI(14) ───────────────────────────────────────────────────────────────
+rsiVal = ta.rsi(close, 14)
+plotshape(rsiVal >= 70 and rsiVal[1] < 70, "Overbought",
+          shape.triangledown, location.top,    color.new(color.red,  55), size.tiny)
+plotshape(rsiVal <= 30 and rsiVal[1] > 30, "Oversold",
+          shape.triangleup,   location.bottom, color.new(color.lime, 55), size.tiny)
+
+// ─── ATR and VCP Tightening ────────────────────────────────────────────────
+atrVal   = ta.atr(atrLen)
+atrAvg10 = ta.sma(atrVal, vcpLook)
+vcpTight = atrVal / atrAvg10 * 100   // < 100 = tightening
+
+// ─── Volume ────────────────────────────────────────────────────────────────
+vol50Avg = ta.sma(volume, 50)
+volRatio = volume / vol50Avg * 100
+
+// ─── Shakeout Detection ────────────────────────────────────────────────────
+// Price < lowest low of last `shakeLen1` bars BUT > close of `shakeLen2` bars ago
+lowestN = ta.lowest(low, shakeLen1)
+shakeout = close < lowestN and close > close[shakeLen2]
+plotshape(shakeout, "Shakeout", shape.xcross, location.abovebar, color.new(color.orange, 70), size.tiny)
+
+// ─── VCP Label on chart ────────────────────────────────────────────────────
+var label vcpLabel = na
+if barstate.islast
+    label.delete(vcpLabel)
+    vcpLabel := label.new(x=bar_index, y=na,
+                          text="VCP " + str.tostring(vcpTight, "#.#") + "%",
+                          style=label.style_label_left, color=color.new(color.blue, 60),
+                          textcolor=color.white, size=size.small, yloc=yloc.abovebar)
+
+// ─── VCP/SEPA Table ────────────────────────────────────────────────────────
+var table t = table.new(position.bottom_right, 2, 10,
+                        bgcolor=color.new(color.white, 90),
+                        border_width=1, border_color=color.gray)
+
+if barstate.islast
+    // VCP phase assessment
+    phase = "—"
+    if vcpTight < 70
+        phase := "Late Tight"
+    else if vcpTight < 90
+        phase := "Tightening"
+    else if vcpTight < 110
+        phase := "Normal"
+    else
+        phase := "Loose"
+
+    rsUp    = rsLine > rsSma20
+    volSurge = volRatio > 140
+
+    table.cell(t, 0, 0, "VCP / SEPA",          text_color=color.white, bgcolor=color.navy,     text_size=size.small)
+    table.cell(t, 1, 0, phase,                  text_color=color.white, bgcolor=color.navy,     text_size=size.small)
+
+    table.cell(t, 0, 1, "Tightening",                                                           text_size=size.small)
+    table.cell(t, 1, 1, str.tostring(vcpTight, "#.#") + "%",                                    text_size=size.small)
+    table.cell(t, 0, 2, "ATR(" + str.tostring(atrLen) + ")",                                    text_size=size.small)
+    table.cell(t, 1, 2, str.tostring(atrVal, "#.##"),                                            text_size=size.small)
+    table.cell(t, 0, 3, "ATR Avg(" + str.tostring(vcpLook) + ")",                               text_size=size.small)
+    table.cell(t, 1, 3, str.tostring(atrAvg10, "#.##"),                                          text_size=size.small)
+    table.cell(t, 0, 4, "Vol%",                                                                 text_size=size.small)
+    table.cell(t, 1, 4, str.tostring(int(volRatio)) + "%",                                      text_size=size.small)
+    table.cell(t, 0, 5, "RS Line",                                                              text_size=size.small)
+    table.cell(t, 1, 5, str.tostring(rsLine, "#.##") + (rsUp ? " ↑" : " ↓"),                  text_size=size.small)
+    table.cell(t, 0, 6, "RSI(14)",                                                              text_size=size.small)
+    table.cell(t, 1, 6, str.tostring(rsiVal, "#.#"),                                            text_size=size.small)
+    table.cell(t, 0, 7, "Shakeout",                                                             text_size=size.small)
+    table.cell(t, 1, 7, shakeout ? "YES" : "no",                                                text_size=size.small)
+
+    // Volume spike colour
+    barcolor(volSurge ? color.new(color.lime, 78) : na)

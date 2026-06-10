@@ -1,0 +1,116 @@
+//@version=5
+indicator(title="David Ryan CANSLIM+ Pack", shorttitle="RYAN+", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  David Ryan CANSLIM + Pyramiding Pack
+//  - RSI(14) with overbought/oversold
+//  - EMA20, SMA50, SMA200
+//  - RS Line vs SPY (cumulative)
+//  - Volume vs 50d avg (%)
+//  - Tight close detection (3+ bars < 5% range)
+//  - 85-85 Score display (proxy via RSI + volume)
+//  - Power from pivot detection
+//  - Pyramiding levels table (50/35/15)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+showMA        = input.bool(true, "Show Moving Averages")
+tightRangePct = input.float(5.0, "Tight Close Max Range %", step=0.5, minval=1)
+tightBars     = input.int(3, "Tight Close Min Bars", minval=2, maxval=10)
+
+// ─── RS Line vs SPY ────────────────────────────────────────────────────────
+spyClose = request.security("SPY", timeframe.period, close)
+var float rsLine = na
+rsRatio = close / spyClose
+if bar_index == 0
+    rsLine := 100
+else
+    rsLine := rsLine[1] * (rsRatio / rsRatio[1])
+rsSma20 = ta.sma(rsLine, 20)
+plot(rsLine,  "RS Line",     color.new(color.purple, 40), linewidth=1, display=display.none)
+plot(rsSma20, "RS SMA(20)",  color.new(color.purple, 25), linewidth=1, display=display.none)
+
+// ─── Moving Averages ───────────────────────────────────────────────────────
+ema20  = ta.ema(close, 20)
+sma50  = ta.sma(close, 50)
+sma200 = ta.sma(close, 200)
+plot(ema20,  "EMA(20)",  color.blue,   showMA ? 2 : 0)
+plot(sma50,  "SMA(50)",  color.orange, showMA ? 1 : 0)
+plot(sma200, "SMA(200)", color.red,    showMA ? 1 : 0)
+
+// ─── RSI(14) ───────────────────────────────────────────────────────────────
+rsiVal = ta.rsi(close, 14)
+plotshape(rsiVal >= 70 and rsiVal[1] < 70, "Overbought",
+          shape.triangledown, location.top,    color.new(color.red,  55), size.tiny)
+plotshape(rsiVal <= 30 and rsiVal[1] > 30, "Oversold",
+          shape.triangleup,   location.bottom, color.new(color.lime, 55), size.tiny)
+
+// ─── Volume ────────────────────────────────────────────────────────────────
+vol50Avg = ta.sma(volume, 50)
+volRatio = volume / vol50Avg * 100
+
+// ─── Tight Close Detection ────────────────────────────────────────────────
+// A tight close = bar range (H-L)/close < threshold
+isTight = (high - low) / close * 100 < tightRangePct
+var int tightCount = 0
+tightCount := isTight ? tightCount[1] + 1 : 0
+inTightPattern = tightCount >= tightBars
+plotshape(inTightPattern, "Tight", shape.square, location.abovebar,
+          color.new(color.orange, 60), size.tiny)
+
+// ─── Power from Pivot Signal ──────────────────────────────────────────────
+// 20%+ gain in 3 weeks from recent swing low
+pivotLow = ta.pivotlow(low, 10, 10)
+var float pctFromPivot = na
+if not na(pivotLow) and pivotLow < close
+    pctFromPivot := (close - pivotLow) / pivotLow * 100
+powerFromPivot = not na(pctFromPivot) and pctFromPivot >= 20
+plotshape(powerFromPivot, "Power Pivot", shape.diamond, location.belowbar,
+          color.new(color.blue, 65), size.tiny)
+
+// ─── 85-85 Score Proxy ───────────────────────────────────────────────────
+epsScore   = rsiVal > 55 ? 85 : rsiVal > 40 ? 60 : 30
+rsScore    = rsLine > rsSma20 ? 85 : 50
+passed85_85 = epsScore >= 85 and rsScore >= 85
+
+// ─── David Ryan Pyramiding Table ──────────────────────────────────────────
+var table t = table.new(position.bottom_right, 2, 13,
+                        bgcolor=color.new(color.white, 90),
+                        border_width=1, border_color=color.gray)
+
+if barstate.islast
+    priceVs10wk = (close / sma50 - 1) * 100  // 50-sma ≈ 10-week
+
+    table.cell(t, 0, 0,  "David Ryan+",           text_color=color.white, bgcolor=color.navy,     text_size=size.small)
+    table.cell(t, 1, 0,  passed85_85 ? "85-85✓" : "85-85✗", text_color=color.white, bgcolor=color.navy, text_size=size.small)
+
+    table.cell(t, 0, 1,  "EPS Score",                                                                text_size=size.small)
+    table.cell(t, 1, 1,  str.tostring(epsScore),                                                     text_size=size.small)
+    table.cell(t, 0, 2,  "RS Score",                                                                 text_size=size.small)
+    table.cell(t, 1, 2,  str.tostring(rsScore),                                                      text_size=size.small)
+    table.cell(t, 0, 3,  "RS Line",                                                                  text_size=size.small)
+    table.cell(t, 1, 3,  str.tostring(rsLine, "#.##") + (rsLine > rsSma20 ? " ↑" : " ↓"),          text_size=size.small)
+    table.cell(t, 0, 4,  "RSI(14)",                                                                  text_size=size.small)
+    table.cell(t, 1, 4,  str.tostring(rsiVal, "#.#"),                                                text_size=size.small)
+    table.cell(t, 0, 5,  "Vol%",                                                                     text_size=size.small)
+    table.cell(t, 1, 5,  str.tostring(int(volRatio)) + "%",                                          text_size=size.small)
+    table.cell(t, 0, 6,  "vs SMA50",                                                                 text_size=size.small)
+    table.cell(t, 1, 6,  str.tostring(priceVs10wk, "#.##") + "%",                                    text_size=size.small)
+    table.cell(t, 0, 7,  "Tight Closes",                                                             text_size=size.small)
+    table.cell(t, 1, 7,  str.tostring(tightCount) + "/" + str.tostring(tightBars),                   text_size=size.small)
+    table.cell(t, 0, 8,  "Power from Pivot",                                                         text_size=size.small)
+    table.cell(t, 1, 8,  powerFromPivot ? "YES 🚀" : "no",                                           text_size=size.small)
+    table.cell(t, 0, 9,  "From Pivot %",                                                             text_size=size.small)
+    table.cell(t, 1, 9,  not na(pctFromPivot) ? str.tostring(pctFromPivot, "#.##") + "%" : "—",      text_size=size.small)
+
+    // Pyramiding reference
+    table.cell(t, 0, 10, "50% Buy",    text_color=color.yellow,                                      text_size=size.small)
+    table.cell(t, 1, 10, "$" + str.tostring(close, "#.##"),                                          text_size=size.small)
+    table.cell(t, 0, 11, "35% Add @",                                                               text_size=size.small)
+    table.cell(t, 1, 11, "+2.5%: $" + str.tostring(close * 1.025, "#.##"),                           text_size=size.small)
+    table.cell(t, 0, 12, "15% Add @",                                                               text_size=size.small)
+    table.cell(t, 1, 12, "+5%: $" + str.tostring(close * 1.05, "#.##"),                              text_size=size.small)
+
+    // Bar colour: heavy accumulation
+    barcolor(volRatio > 140 and close > open ? color.new(color.lime, 78) :
+             volRatio > 140 and close < open ? color.new(color.red, 78) : na)

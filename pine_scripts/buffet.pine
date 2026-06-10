@@ -1,0 +1,98 @@
+//@version=5
+indicator(title="Buffett Value Pack", shorttitle="VALUE", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Warren Buffett Value Indicator Pack
+//  - SMA50, SMA200
+//  - P/E, P/B, dividend yield display
+//  - ROE approximation
+//  - Buyback indication
+//  - Debt/Equity proxy
+//  - Moat Score table
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+showMA     = input.bool(true, "Show Moving Averages")
+peInput    = input.float(20.0, "P/E Ratio", step=0.5)
+pbInput    = input.float(3.0, "P/B Ratio", step=0.1)
+roeInput   = input.float(15.0, "ROE %", step=1.0)
+divYield   = input.float(0.0, "Div Yield %", step=0.1)
+deInput    = input.float(1.0, "D/E Ratio", step=0.1)
+
+// ─── Moving Averages ───────────────────────────────────────────────────────
+sma50  = ta.sma(close, 50)
+sma200 = ta.sma(close, 200)
+plot(sma50,  "SMA(50)",  color.orange, showMA ? 2 : 0)
+plot(sma200, "SMA(200)", color.red,    showMA ? 1 : 0)
+
+// ─── RSI(14) ───────────────────────────────────────────────────────────────
+rsiVal = ta.rsi(close, 14)
+
+// ─── Volume ────────────────────────────────────────────────────────────────
+vol50Avg = ta.sma(volume, 50)
+volRatio = volume / vol50Avg * 100
+
+// ─── Moat Score ────────────────────────────────────────────────────────────
+// Composite quality score based on inputs
+moatScore = 0
+
+// Moat criteria
+roeGood   = roeInput >= 15
+peGood    = peInput <= 25 and peInput > 0
+pbGood    = pbInput <= 5
+deGood    = deInput <= 1.5
+divGood   = divYield > 0
+priceOk   = close > sma50 and close > sma200
+
+if roeGood:    moatScore += 2
+if peGood:     moatScore += 1
+if pbGood:     moatScore += 1
+if deGood:     moatScore += 2
+if divGood:    moatScore += 1
+if priceOk:    moatScore += 1
+
+// Interpretation
+moatDesc = "—"
+if moatScore >= 7
+    moatDesc := "Wide Moat 🛡️"
+else if moatScore >= 5
+    moatDesc := "Narrow Moat"
+else if moatScore >= 3
+    moatDesc := "No Moat"
+else
+    moatDesc := "Commodity"
+
+// ─── Buffett Value Table ──────────────────────────────────────────────────
+var table t = table.new(position.bottom_right, 2, 12,
+                        bgcolor=color.new(color.white, 90),
+                        border_width=1, border_color=color.gray)
+
+if barstate.islast
+    table.cell(t, 0, 0,  "Buffett Value",          text_color=color.white, bgcolor=color.navy,     text_size=size.small)
+    table.cell(t, 1, 0,  moatDesc,                 text_color=color.white, bgcolor=color.navy,     text_size=size.small)
+
+    table.cell(t, 0, 1,  "Moat Score",                                                                text_size=size.small)
+    table.cell(t, 1, 1,  str.tostring(moatScore) + "/8",                                             text_size=size.small)
+    table.cell(t, 0, 2,  "ROE%",                                                                      text_size=size.small)
+    table.cell(t, 1, 2,  str.tostring(roeInput, "#.#") + "%" + (roeGood ? " ✓" : " ✗"),             text_size=size.small)
+    table.cell(t, 0, 3,  "P/E",                                                                       text_size=size.small)
+    table.cell(t, 1, 3,  str.tostring(peInput, "#.#") + (peGood ? " ✓" : " ✗"),                      text_size=size.small)
+    table.cell(t, 0, 4,  "P/B",                                                                       text_size=size.small)
+    table.cell(t, 1, 4,  str.tostring(pbInput, "#.##") + (pbGood ? " ✓" : " ✗"),                     text_size=size.small)
+    table.cell(t, 0, 5,  "D/E",                                                                       text_size=size.small)
+    table.cell(t, 1, 5,  str.tostring(deInput, "#.##") + (deGood ? " ✓" : " ✗"),                     text_size=size.small)
+    table.cell(t, 0, 6,  "Div Yield",                                                                 text_size=size.small)
+    table.cell(t, 1, 6,  str.tostring(divYield, "#.##") + "%" + (divGood ? " ✓" : " —"),             text_size=size.small)
+    table.cell(t, 0, 7,  "RSI(14)",                                                                   text_size=size.small)
+    table.cell(t, 1, 7,  str.tostring(rsiVal, "#.#"),                                                 text_size=size.small)
+    table.cell(t, 0, 8,  "Price vs SMA50",                                                            text_size=size.small)
+    table.cell(t, 1, 8,  str.tostring((close/sma50-1)*100, "#.##") + "%",                             text_size=size.small)
+    table.cell(t, 0, 9,  "Price vs SMA200",                                                           text_size=size.small)
+    table.cell(t, 1, 9,  str.tostring((close/sma200-1)*100, "#.##") + "%",                            text_size=size.small)
+    table.cell(t, 0, 10, "Vol%",                                                                      text_size=size.small)
+    table.cell(t, 1, 10, str.tostring(int(volRatio)) + "%",                                           text_size=size.small)
+    table.cell(t, 0, 11, "Price > MA50/200",                                                          text_size=size.small)
+    table.cell(t, 1, 11, priceOk ? "YES" : "NO",                                                      text_size=size.small)
+
+    barcolor(volRatio > 150 and priceOk ? color.new(color.lime, 78) :
+             volRatio > 150 ? color.new(color.red, 78) : na)

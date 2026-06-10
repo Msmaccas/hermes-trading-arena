@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Secrets / config
+.env
+auth.json
+auth.lock
+config.yaml
+*.db
+*.db-shm
+*.db-wal
+*.db-init.lock
+*.lock
+
+# Cache
+cache/
+audio_cache/
+image_cache/
+models_dev_cache.json
+desktop-build-stamp.json
+
+# Logs
+logs/
+cron/
+hooks/
+state-snapshots/
+
+# Temp
+memories/
+sessions/
+pairing/
+gateway_state.json
+channel_directory.json
+state.db*
+
+# Orch
+orchestrator/
+orchestrator_*.md
+
+# Git
