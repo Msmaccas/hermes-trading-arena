@@ -4,7 +4,7 @@
 
 Ticker: VELO
 Date:   2026-06-11
-Price:  $22.68
+Price:  $nan
 
 WHAT I CHECK FIRST: First check: Does the stock have a valid VCP (Volatility Contraction Pattern) base? Check for 5-6 week minimum base, each correction showing less volatility, RS line in new high ground before price. Check market breadth: % stocks above 200-day MA vs index new highs.
 
@@ -20,11 +20,11 @@ REASONING (each bullet = verbatim quote):
 
 [3] "The secret to compounding is not big winners — it's not having big losers. Protect the downside and the upside takes care of itself."
     Source: Mindset, Methods, and Market Strategies (2022)
-    => f'CFO sold 0% of holdings. Chairman sold $0.0M secondary. 0.0M recalled units. 0 class actions. Net income only +0.0% on +48.199999999999996% revenue. This is a litany of downside risks. Protecting the downside means AVOIDING this stock entirely.
+    => CFO sold 0% of holdings. Chairman sold $0.0M secondary. 0.0M recalled units. 0 class actions. Net income only +0.0% on +48.199999999999996% revenue. This is a litany of downside risks. Protecting the downside means AVOIDING this stock entirely.
 
 [4] "When the market is in a confirmed uptrend, be fully invested. When it's not, sit on your hands. It's that simple — but the hardest thing to do."
     Source: Mindset, Methods, and Market Strategies (2022)
-    => f'Market has {d['distribution_days']} distribution days in {d['distribution_days_period']}. No follow-through day confirmed. Market is NOT in a confirmed uptrend. Progressive exposure says sit at 0-25% maximum. And even then, you need a valid setup.
+    => Market has 0 distribution days in . No follow-through day confirmed. Market is NOT in a confirmed uptrend. Progressive exposure says sit at 0-25% maximum. And even then, you need a valid setup.
 
 [5] "If I can do it, anybody can. I started with nothing, failed for years, and figured it out through discipline and process."
     Source: YouTube: https://youtube.com/@markminervini
@@ -36,7 +36,7 @@ Indicators Used:
   - VCP pattern: NOT PRESENT
   - RS line: NOT in new high ground
   - Insider selling: CFO 0%, chairman $0.0M
-  - Product recall: 1.8M units
+  - Product recall: 0.0M units
   - Net margin decline: +0bps to 0.0%
   - Distribution days: 0 in 
   - Market regime: Correction
@@ -45,7 +45,7 @@ Decision Tree Path:
   -> STEP 1: STRUCTURE — No VCP base → STOP
   -> RS CHECK: RS line lagging → NO BREAKOUT POWER
   -> FUNDAMENTAL CHECK: Multiple red flags → PASS
-  -> MARKET CHECK: 6 distribution days → SIT ON HANDS
+  -> MARKET CHECK: 0 distribution days → SIT ON HANDS
 
 Sources Cited:
 ========================================================================

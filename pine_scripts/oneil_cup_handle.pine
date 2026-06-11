@@ -1,0 +1,131 @@
+//@version=5
+indicator(title="O'Neil Cup with Handle", shorttitle="CupHandle", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  O'Neil Cup-with-Handle Pattern Detector
+//  - Identifies cup bases (15-35% correction, 7+ weeks)
+//  - Detects handles (10-15% drift on light volume, 1-4 weeks)
+//  - Volume confirmation: breakout volume 50%+ above average
+//  - RS line new high check
+//  - Pivot price label
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+minCupDepth     = input.float(15.0, "Min Cup Depth (%)", step=0.5)
+maxCupDepth     = input.float(35.0, "Max Cup Depth (%)", step=0.5)
+minHandleDepth  = input.float(0.0, "Min Handle Depth (%)", step=0.5)
+maxHandleDepth  = input.float(15.0, "Max Handle Depth (%)", step=0.5)
+lookback        = input.int(250, "Cup Lookback (bars)", minval=100)
+pivotLeft       = input.int(5, "Pivot Left Bars", minval=2)
+pivotRight      = input.int(5, "Pivot Right Bars", minval=2)
+volAvgLen       = input.int(50, "Volume Avg Length", minval=10)
+volMultiplier   = input.float(1.5, "Breakout Volume Min (x avg)", step=0.1)
+showLabels      = input.bool(true, "Show Pattern Labels")
+
+// ─── Moving Averages ───────────────────────────────────────────────────────
+sma50  = ta.sma(close, 50)
+sma200 = ta.sma(close, 200)
+plot(sma50,  "SMA(50)",  color.orange, 1)
+plot(sma200, "SMA(200)", color.red,    1)
+
+// ─── Volume ─────────────────────────────────────────────────────────────────
+volAvg = ta.sma(volume, volAvgLen)
+volRatio = volume / volAvg
+volColor = volRatio > volMultiplier ? color.green : volRatio > 1.0 ? color.lime : color.gray
+plot(volRatio, "Vol Ratio", display=display.none)
+
+// ─── Pivot Detection ───────────────────────────────────────────────────────
+leftHigh = ta.pivothigh(pivotLeft, pivotRight)
+leftLow  = ta.pivotlow(pivotLeft, pivotRight)
+
+// ─── Cup Detection ──────────────────────────────────────────────────────────
+var float cupHigh   = na
+var float cupLow    = na
+var int   cupStart  = na
+var int   cupEnd    = na
+var bool  cupDetected = false
+var float handleHigh = na
+var float handleLow  = na
+var int   handleStart = na
+var bool  handleDetected = false
+var float pivotPrice = na
+var bool  breakoutDetected = false
+
+// Track recent swing high (left cup lip)
+if leftHigh
+    cupHigh := leftHigh
+    cupStart := bar_index
+    cupDetected := false
+    handleDetected := false
+    breakoutDetected := false
+
+// Track swing low (cup bottom)
+if leftLow
+    cupLow := leftLow
+    cupEnd := bar_index
+
+// Check cup validity
+if not na(cupHigh) and not na(cupLow) and not na(cupStart)
+    cupDepthPct = (cupHigh - cupLow) / cupHigh * 100
+    cupBars = cupEnd - cupStart
+    if cupDepthPct >= minCupDepth and cupDepthPct <= maxCupDepth and cupBars >= 35  // ~7 weeks
+        cupDetected := true
+
+// ─── Handle Detection (right side drifts down on light volume) ───────────
+if cupDetected and not na(cupLow)
+    handleHigh := ta.highest(high, 30)
+    handleLow  := ta.lowest(low, 10)
+    handleDepthPct = (handleHigh - handleLow) / handleHigh * 100
+
+    if handleDepthPct >= minHandleDepth and handleDepthPct <= maxHandleDepth
+        handleDetected := true
+        handleStart := bar_index - 10
+        pivotPrice := handleHigh
+
+// ─── Breakout Detection ──────────────────────────────────────────────────
+if handleDetected and not na(pivotPrice)
+    if close > pivotPrice and volRatio > volMultiplier
+        breakoutDetected := true
+
+// ─── RS Line (Relative Strength vs SPY) ──────────────────────────────────────
+spyClose = request.security("SPY", timeframe.period, close)
+var float rsLine = na
+rsRatio = close / spyClose
+if bar_index == 0
+    rsLine := 100
+else
+    rsLine := rsLine[1] * (rsRatio / rsRatio[1])
+rsNewHigh = rsLine == ta.highest(rsLine, 50)
+plot(rsLine, "RS Line", color.new(color.purple, 50), 1, display=display.none)
+
+// ─── Labels ───────────────────────────────────────────────────────────────
+if showLabels
+    if cupDetected and not handleDetected
+        label.new(bar_index, high, "CUP\n" + str.tostring(cupDepthPct, "#.#") + "%",
+                  style=label.style_label_down, color=color.new(color.blue, 60),
+                  textcolor=color.white, size=size.small)
+    if handleDetected
+        label.new(bar_index, high, "HANDLE\n" + str.tostring(handleDepthPct, "#.#") + "%",
+                  style=label.style_label_down, color=color.new(color.orange, 60),
+                  textcolor=color.white, size=size.small)
+    if breakoutDetected
+        label.new(bar_index, low, "BREAKOUT\nVol:" + str.tostring(volRatio, "#.#") + "x",
+                  style=label.style_label_up, color=color.new(color.green, 70),
+                  textcolor=color.white, size=size.small)
+        if rsNewHigh
+            label.new(bar_index, low, "RS NEW HIGH",
+                      style=label.style_label_up, color=color.new(color.purple, 70),
+                      textcolor=color.white, size=size.tiny, yloc=yloc.belowbar)
+
+// ─── Pivot Line ──────────────────────────────────────────────────────────────
+if not na(pivotPrice)
+    line.new(bar_index - 10, pivotPrice, bar_index + 5, pivotPrice,
+             color=color.new(color.green, 50), width=1, style=line.style_dashed,
+             extend=extend.right)
+
+// ─── Bar Coloring ──────────────────────────────────────────────────────────
+barcolor(breakoutDetected ? color.green : na)
+
+// ─── Alert ─────────────────────────────────────────────────────────────────
+alertcondition(breakoutDetected, title="Cup+Handle Breakout",
+               message="Cup with handle breakout detected! Pivot: {{pivotPrice}}")

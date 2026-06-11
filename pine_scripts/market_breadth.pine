@@ -1,0 +1,158 @@
+//@version=5
+indicator(title="Market Breadth Suite", shorttitle="MktBreadth", overlay=false, format=format.percent, precision=1)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Market Breadth Suite
+//  - % of stocks above 50-day MA (short-term breadth)
+//  - % of stocks above 200-day MA (long-term breadth)
+//  - Divergence detection (price making new highs while breadth weakening)
+//  - Market phase identification (improving/deteriorating)
+//  - Cross signals (50d crosses 200d)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+symbolCount    = input.int(500, "Symbols to Scan", minval=100, maxval=3000)
+showLabels     = input.bool(true, "Show Labels")
+bbLength       = input.int(20, "Bollinger Band Length", minval=10, maxval=50)
+bbMult         = input.float(2.0, "Bollinger Band Stdev", step=0.5)
+signalLength   = input.int(9, "Signal SMA Length", minval=3, maxval=30)
+
+// ─── Stock Universe: use SP500 constituents via index symbols ──────────
+// We scan a broad list of liquid stocks. The indicator uses request.security()
+// on each symbol by fetching the symbol list from the scanner or using index ETF data.
+// For compatibility, we calculate breadth using the built-in % above MA
+// based on the TV screener's built-in breadth calculation.
+
+// ─── Primary Breadth: % Above 50-day MA ──────────────────────────────────
+// TradingView provides built-in breadth through its screener,
+// but for direct indicator use, we compute proxy via close/MA ratio
+sma50 = ta.sma(close, 50)
+sma200 = ta.sma(close, 200)
+
+above50 = close > sma50 ? 100.0 : 0.0
+above200 = close > sma200 ? 100.0 : 0.0
+
+// Plot for current symbol (not true market breadth, but individual status)
+// For true market breadth use the BREADTH indicator from TV's library
+
+// ─── Breadth Proxy using Sector ETFs ──────────────────────────────────────
+// Use major sector ETFs as breadth proxy
+tickers = array.from("SPY", "QQQ", "IWM", "DIA",
+                     "XLK", "XLF", "XLV", "XLI", "XLE",
+                     "XLP", "XLY", "XLB", "XLU", "XLRE",
+                     "SMH", "IBB", "ARKK", "KRE", "KBE",
+                     "XRT", "ITB", "IYT", "XHB", "IBUY")
+
+var float above50Count = 0.0
+var float above200Count = 0.0
+var float totalChecked = 0.0
+
+// Scan sector ETFs for breadth proxy
+if barstate.islast
+    above50Count := 0.0
+    above200Count := 0.0
+    totalChecked := 0.0
+    for i = 0 to array.size(tickers) - 1
+        t = array.get(tickers, i)
+        if t != syminfo.tickerid
+            s50 = request.security(t, timeframe.period, ta.sma(close, 50))
+            s200 = request.security(t, timeframe.period, ta.sma(close, 200))
+            cl = request.security(t, timeframe.period, close)
+            if not na(s50) and not na(cl)
+                totalChecked += 1
+                if cl > s50
+                    above50Count += 1
+            if not na(s200) and not na(cl)
+                if cl > s200
+                    above200Count += 1
+
+pctAbove50 = totalChecked > 0 ? (above50Count / totalChecked) * 100 : na
+pctAbove200 = totalChecked > 0 ? (above200Count / totalChecked) * 100 : na
+
+// ─── Smooth breadths ─────────────────────────────────────────────────────
+breadth50 = pctAbove50
+breadth200 = pctAbove200
+
+// Also calculate using a rolling z-score approach for individual stock
+// Compute using price vs MA ratio as a continuous proxy
+ma50Ratio = sma50 > 0 ? close / sma50 : 1.0
+ma200Ratio = sma200 > 0 ? close / sma200 : 1.0
+
+// ─── Main Breadth Plot (uses index-level data) ──────────────────────────
+// When run on broad market symbols or index ETFs, shows market-wide breadth
+plot(breadth50, "% Above 50d MA", color.new(color.blue, 70), 2)
+plot(breadth200, "% Above 200d MA", color.new(color.red, 60), 2)
+
+// ─── Bollinger Bands on Breadth ──────────────────────────────────────────
+basis50 = ta.sma(breadth50, bbLength)
+stdev50 = ta.stdev(breadth50, bbLength)
+bbUpper = basis50 + (stdev50 * bbMult)
+bbLower = basis50 - (stdev50 * bbMult)
+
+plot(basis50, "Breadth SMA", color.new(color.orange, 50), 1)
+plot(bbUpper, "BB Upper", color.new(color.green, 30), 1)
+plot(bbLower, "BB Lower", color.new(color.red, 30), 1)
+fill(plot(bbUpper), plot(bbLower), color.new(color.gray, 10))
+
+// ─── Divergence Detection ──────────────────────────────────────────────────
+// Breadth making lower highs while price makes higher highs = divergence
+spyClose = request.security("SPY", timeframe.period, close)
+spyHigh = ta.highest(spyClose, 20)
+breadthHigh50 = ta.highest(breadth50, 20)
+breadthHigh200 = ta.highest(breadth200, 20)
+
+divergence50 = spyHigh > spyHigh[10] and breadthHigh50 < breadthHigh50[10]
+divergence200 = spyHigh > spyHigh[10] and breadthHigh200 < breadthHigh200[10]
+
+// ─── Market Phase ──────────────────────────────────────────────────────
+improving = breadth50 > breadth50[5] and breadth200 > breadth200[5]
+deteriorating = breadth50 < breadth50[5] and breadth200 < breadth200[5]
+
+// ─── 50/200 Cross Signals ──────────────────────────────────────────────
+crossAbove = ta.crossover(breadth50, breadth200)
+crossBelow = ta.crossunder(breadth50, breadth200)
+
+// ─── Horizontal Reference Lines ──────────────────────────────────────────
+hline(70, "Overbought", color.new(color.green, 40), hline.style_dashed)
+hline(50, "Midpoint",  color.new(color.gray, 30), hline.style_dotted)
+hline(30, "Oversold",  color.new(color.red, 40), hline.style_dashed)
+
+// ─── Labels ──────────────────────────────────────────────────────────────
+if showLabels
+    if divergence50
+        label.new(bar_index, breadth50 + 5, "DIVERGENCE\nPrice UP, Breadth DOWN",
+                  style=label.style_label_down, color=color.new(color.red, 60),
+                  textcolor=color.white, size=size.tiny)
+    if crossAbove
+        label.new(bar_index, breadth50, "50d>200d BUMP",
+                  style=label.style_label_up, color=color.new(color.green, 60),
+                  textcolor=color.white, size=size.tiny)
+    if crossBelow
+        label.new(bar_index, breadth50, "50d<200d BUMP",
+                  style=label.style_label_down, color=color.new(color.red, 60),
+                  textcolor=color.white, size=size.tiny)
+
+// ─── Bar Coloring ──────────────────────────────────────────────────────────
+barcolor(improving ? color.lime : deteriorating ? color.red : na)
+
+// ─── Table: Breadth Summary ──────────────────────────────────────────────
+if barstate.islast
+    var tbl = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 80), border_width=1)
+    table.cell(tbl, 0, 0, "Above 50d", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 1, str.tostring(breadth50, "#.#") + "%", text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 1, 0, "Above 200d", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 1, str.tostring(breadth200, "#.#") + "%", text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 0, 2, "Phase", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 3, improving ? "IMPROVING" : "DETERIORATING", text_color=improving ? color.lime : color.red, text_size=size.small)
+    table.cell(tbl, 1, 2, "Divergence", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 3, divergence50 ? "YES (50d)" : "NO", text_color=divergence50 ? color.red : color.lime, text_size=size.small)
+    table.cell(tbl, 0, 4, "Symbols", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 4, str.tostring(totalChecked, "#0"), text_color=color.yellow, text_size=size.small)
+
+// ─── Alerts ──────────────────────────────────────────────────────────────
+alertcondition(divergence50, title="Breadth Divergence",
+               message="Bearish divergence! Price making highs but breadth declining.")
+alertcondition(crossAbove, title="50d Cross Above 200d",
+               message="Breadth improving! % above 50d crossed above % above 200d.")
+alertcondition(crossBelow, title="50d Cross Below 200d",
+               message="Breadth deteriorating! % above 50d crossed below % above 200d.")

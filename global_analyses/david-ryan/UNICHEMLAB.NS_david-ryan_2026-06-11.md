@@ -1,0 +1,55 @@
+========================================================================
+=== DAVID RYAN ===
+========================================================================
+
+Ticker: UNICHEMLAB.NS
+Date:   2026-06-11
+Price:  $494.25
+
+WHAT I CHECK FIRST: First check: Run the 85-85 screen (EPS rating 85+, RS rating 85+). Check MarketSmith 250 sorted by strongest industry groups. Look for tight weekly closes near top of base, RS line making new high before price, and breakout volume 50-100%+ above average.
+
+REASONING (each bullet = verbatim quote):
+
+[1] "The 85-85 screen (EPS 85+ and RS 85+) is my starting point every morning. That filters out 95% of garbage."
+    Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
+    => EPS rating fails because net income growth is +-79.3% (requirement is 20% minimum in CANSLIM). RS rating fails because RS line is NOT making new highs. The first filter kills this stock — I'd never even see it.
+
+[2] "I look for tight closes for at least three weeks near the top of the base. That tightness shows the stock is coiling for a breakout."
+    Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
+    => There is NO base pattern. No tight closes. No coiling. No cup-with-handle. No accumulation. Without a base, there's no breakout. Without a breakout, there's no trade.
+
+[3] "Health check — fast up on big volume, slow down on light volume, rarely two weeks down in a row."
+    Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
+    => This stock is NOT acting healthy. Fast down on bad news (recalls, litigation). No accumulation. Insiders are distributors. The healthy pattern is completely absent.
+
+[4] "Cut your losers like a cancer. If a stock isn't acting right, get rid of it immediately. Don't hope it comes back."
+    Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
+    => CFO sold 0% of holdings. Chairman $0.0M secondary. This stock 'isn't acting right.' The people closest to it are getting out. Cut it.
+
+[5] "Sitting is more important than thinking."
+    Source: IBD TV: https://www.investors.com/research/investing-lessons-from-david-ryan/
+    => 0 distribution days on SPY. Market in correction. The best thing you can do right now is sit on your hands and wait for the next uptrend. Even if UNICHEMLAB.NS were a perfect setup (it's not), the market says stay in cash.
+
+[6] "The biggest mistake investors make is holding onto their losers and selling their winners."
+    Source: MarketSmith Webinar: https://marketsmith.investors.com
+    => CANSLIM fundamental screen: C (+-79.3% EPS) FAIL, A (+-2.1% revenue, slowing) FAIL, S (insiders selling) FAIL, L (RS low) FAIL, I (institutional confidence breaking) FAIL, M (0 distro days) FAIL. Only N marginal. DON'T HOLD THIS LOSER.
+
+VERDICT: SELL. Conviction: 0.8.
+
+Indicators Used:
+  - EPS rating: FAILS (net income +-79.3% < 20% minimum)
+  - RS rating: FAILS (NOT in new high ground)
+  - Base pattern: NONE (no tight closes, no coiling)
+  - Insider selling: CFO 0%, chairman $0.0M (strong distribution signal)
+  - Distribution days: 0 in 
+  - Market regime: Correction (not confirmed uptrend)
+
+Decision Tree Path:
+  -> 85-85 SCREEN: FAILS both EPS and RS → FILTERED OUT in first pass
+  -> CHART CHECK: No base pattern → NO TRADE
+  -> HEALTH CHECK: UNHEALTHY pattern → SELL
+  -> INSIDER CHECK: Massive insider selling → CUT
+  -> MARKET CHECK: 0 distribution days → CASH IS KING
+
+Sources Cited:
+========================================================================

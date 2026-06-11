@@ -1,0 +1,120 @@
+//@version=5
+indicator(title="Brian Shannon Anchored VWAP", shorttitle="AVWAP", overlay=true, format=format.price, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Brian Shannon Anchored VWAP (AVWAP)
+//  - Anchored VWAP from significant swing lows
+//  - Multiple timeframe AVWAP (daily, weekly)
+//  - ATR(14) channel overlay for breakout confirmation
+//  - Price vs AVWAP distance indicator
+//  - Pullback-to-AVWAP detection ("the gift")
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Inputs ────────────────────────────────────────────────────────────────
+swingLen        = input.int(10, "Swing Length", minval=3, maxval=50)
+showAVWAP       = input.bool(true, "Show Anchored VWAP")
+showATRChannel  = input.bool(true, "Show ATR Channel")
+atrMult         = input.float(1.5, "ATR Channel Multiplier", step=0.1)
+showPullbackSignal = input.bool(true, "Show Pullback Signal")
+
+// ─── Swing Low Detection ──────────────────────────────────────────────────
+swingLow = ta.pivotlow(swingLen, swingLen)
+swingHigh = ta.pivothigh(swingLen, swingLen)
+
+// ─── Anchored VWAP Calculation ───────────────────────────────────────────
+// VWAP anchored at the most recent significant swing low
+var float avwap = na
+var float avwapWeekly = na
+var int anchorBar = na
+var float anchorPrice = na
+
+// Calculate VWAP
+calcVwap(anchor) =>
+    float vwapVal = na
+    float cumVol = 0.0
+    float cumPV = 0.0
+    for i = anchor to bar_index
+        vol = volume[i]
+        hl = (high[i] + low[i] + close[i]) / 3
+        cumVol += vol
+        cumPV += hl * vol
+    if cumVol > 0
+        vwapVal := cumPV / cumVol
+    vwapVal
+
+// Anchor at most recent swing low
+if swingLow
+    anchorBar := bar_index
+    anchorPrice := swingLow
+    avwap := calcVwap(anchorBar)
+
+// Weekly AVWAP
+avwapWeekly := request.security(syminfo.tickerid, "W", avwap)
+
+// ─── Plot AVWAP ──────────────────────────────────────────────────────────
+plot(showAVWAP and not na(avwap) ? avwap : na,
+     "AVWAP (Swing Low)", color.new(color.blue, 40), 2)
+plot(showAVWAP and not na(avwapWeekly) ? avwapWeekly : na,
+     "AVWAP Weekly", color.new(color.purple, 30), 1)
+
+// ─── ATR Channel ──────────────────────────────────────────────────────────
+atrVal = ta.atr(14)
+atrHigh = close + (atrVal * atrMult)
+atrLow  = close - (atrVal * atrMult)
+
+atrHighPlot = plot(showATRChannel ? atrHigh : na, "ATR Upper", color.new(color.green, 30), 1)
+atrLowPlot  = plot(showATRChannel ? atrLow : na,  "ATR Lower",  color.new(color.red, 30), 1)
+fill(atrHighPlot, atrLowPlot, color.new(color.gray, 10), title="ATR Channel Fill")
+
+// ─── Distance from AVWAP ────────────────────────────────────────────────
+float distFromVWAP = na
+if not na(avwap) and avwap > 0
+    distFromVWAP := (close - avwap) / avwap * 100
+
+plot(distFromVWAP, "AVWAP Distance %", color.new(color.orange, 60), 2, display=display.none)
+hline(0, "VWAP", color.new(color.gray, 50), hline.style_dashed, display=display.none)
+hline(5, "Above 5%", color.new(color.green, 40), hline.style_dashed, display=display.none)
+hline(-5, "Below 5%", color.new(color.red, 40), hline.style_dashed, display=display.none)
+
+// ─── Pullback to AVWAP Detection ─────────────────────────────────────────
+// "When price pulls back to AVWAP in an uptrend, that's the gift."
+inUptrend = close > ta.sma(close, 200)
+nearAVWAP = not na(distFromVWAP) and distFromVWAP > -0.5 and distFromVWAP < 0.5
+pullbackSignal = inUptrend and nearAVWAP and showPullbackSignal
+
+// ─── Breakout Signal (price above high + 0.5x ATR from prior swing high) ─
+float priorSwingHigh = ta.valuewhen(swingHigh, swingHigh, 0)
+breakoutLevel = not na(priorSwingHigh) ? priorSwingHigh + (atrVal * 0.5) : na
+breakoutSignal = not na(breakoutLevel) and close > breakoutLevel
+
+// ─── Multiple Timeframe AVWAP Alignment ─────────────────────────────────
+avwapSlopeUp = not na(avwap) and not na(avwap[5]) and avwap > avwap[5]
+avwapWeeklySlopeUp = not na(avwapWeekly) and not na(avwapWeekly[1]) and avwapWeekly > avwapWeekly[1]
+timeframeAlignment = avwapSlopeUp and avwapWeeklySlopeUp
+
+// ─── Labels ──────────────────────────────────────────────────────────────
+if pullbackSignal and showLabels
+    label.new(bar_index, low, "AVWAP GIFT\n" + str.tostring(distFromVWAP, "#.#") + "%",
+              style=label.style_label_up, color=color.new(color.green, 70),
+              textcolor=color.white, size=size.small)
+
+if breakoutSignal and showLabels
+    label.new(bar_index, high, "ATR BREAKOUT",
+              style=label.style_label_down, color=color.new(color.blue, 60),
+              textcolor=color.white, size=size.small)
+
+// ─── Table: AVWAP Status ─────────────────────────────────────────────────
+if barstate.islast
+    var tbl = table.new(position.top_right, 2, 4, bgcolor=color.new(color.black, 80), border_width=1)
+    table.cell(tbl, 0, 0, "AVWAP", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 1, str.tostring(avwap, "$#.##"), text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 1, 0, "Distance", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 1, 1, str.tostring(distFromVWAP, "#.##") + "%", text_color=color.yellow, text_size=size.small)
+    table.cell(tbl, 0, 2, "Alignment", text_color=color.white, text_size=size.small)
+    table.cell(tbl, 0, 3, timeframeAlignment ? "ALIGNED" : "DIVERGED", text_color=timeframeAlignment ? color.lime : color.red, text_size=size.small)
+
+// ─── Alerts ──────────────────────────────────────────────────────────────
+alertcondition(pullbackSignal, title="AVWAP Pullback",
+               message="Price pulled back to AVWAP! {{ticker}} at {{close}}")
+alertcondition(breakoutSignal, title="ATR Breakout",
+               message="ATR channel breakout! {{ticker}} at {{close}}")

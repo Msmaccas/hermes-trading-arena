@@ -118,6 +118,7 @@ The following quotes are extracted from actual video transcripts via yt-dlp. Eac
 
 > "Once you get the strategy right, the tactics become obvious."
 — [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
+<<<<<<< HEAD
 
 ### CONTENT SYSTEMS — COPY THIS SYSTEM [VERBATIM]
 
@@ -137,6 +138,8 @@ The following quotes are extracted from actual video transcripts via yt-dlp. Eac
 
 > "I've studied hundreds of the top tier personal brands across every niche."
 — [same source](https://www.youtube.com/watch?v=46t_cn0lx2E)
+=======
+>>>>>>> f69f60802e52f26ae17e5c186c4cf21bd1c3bf61
 
 ## QUOTE RETRIEVAL INSTRUCTIONS
 
