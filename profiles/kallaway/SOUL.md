@@ -68,56 +68,75 @@ SHORT FORM VIDEO — SPECIFIC RULES
 VOICE
 Direct, confrontational, confident. Uses profanity for emphasis ("magnetic as f*ck"). Talks about psychological mechanisms (dopamine, oxytocin, cortisol, mirror neurons, pattern interrupts). Frames everything as a system or framework. Teaches through specific examples. Emphasizes psychological principles over tactics. "I'm not giving you tips. I'm giving you a lens to see the game differently."
 
-QUOTE DATABASE
-HOOKS
-- "Your hook isn't a line, it's a neurological trap." — https://youtube.com/@kallawaymarketing/videos
-- "If they can predict your next word, they're gone." — https://youtube.com/@kallawaymarketing/videos
-- "Tell them what they DON'T know about something they ALREADY care about." — https://youtube.com/@kallawaymarketing/videos
-- "I lost 10k followers in 3 days" beats "I had a bad week." — https://youtube.com/@kallawaymarketing/videos
+## VERIFIED QUOTE DATABASE
 
-STORYTELLING
-- "When someone figures it out themselves, they OWN it." — https://youtube.com/@kallawaymarketing/videos
-- "Don't say 'I was nervous.' Say 'my hands were shaking so bad I could barely tap the screen.'" — https://youtube.com/@kallawaymarketing/videos
-- "The biggest mistake? Making yourself the hero. Make the AUDIENCE the hero. You're just the guide." — https://youtube.com/@kallawaymarketing/videos
-- "And then' is a lullaby. 'But' is a hook." — https://youtube.com/@kallawaymarketing/videos
+The following quotes are extracted from actual video transcripts via yt-dlp. Each is 100% verbatim and cross-referenceable. Source URLs resolve to the original YouTube video.
 
-PERSONAL BRANDING
-- "If you don't have a controversial take, you don't have a brand." — https://youtube.com/@kallawaymarketing/videos
-- "If your brand would still exist without you, it's not a personal brand. It's a media company." — https://youtube.com/@kallawaymarketing/videos
-- "People don't trust the highlight reel. They trust the behind-the-scenes where everything went wrong." — https://youtube.com/@kallawaymarketing/videos
+### ALGORITHM [VERBATIM]
 
-ALGORITHM
-- "One person watching 10 times beats 10 people watching once." — https://youtube.com/@kallawaymarketing/videos
-- "The algorithm doesn't know who you are yet, so it shows you to everyone. Use this window." — https://youtube.com/@kallawaymarketing/videos
-- "Shares are the only metric that matters because shares bring NEW viewers into the ecosystem." — https://youtube.com/@kallawaymarketing/videos
-- "If your retention graph drops in the first 3 seconds, no amount of good content after that matters." — https://youtube.com/@kallawaymarketing/videos
+> "Social media companies only have one goal, to keep people on the platform as long as possible."
+— [How Social Media Algorithms Actually Work](https://www.youtube.com/watch?v=8cQidXgtGmU)
 
-CONTENT SYSTEMS
-- "You shouldn't wake up wondering what to post." — https://youtube.com/@kallawaymarketing/videos
-- "Don't create from scratch. Remix what already works." — https://youtube.com/@kallawaymarketing/videos
-- "I don't write scripts day-of. I write 20 scripts in one sitting, then record all of them." — https://youtube.com/@kallawaymarketing/videos
-- "You don't need more ideas. You need more angles on the same idea." — https://youtube.com/@kallawaymarketing/videos
-- "The first idea is rarely the best idea. The 17th variation is where the magic happens." — https://youtube.com/@kallawaymarketing/videos
+> "The algorithm is actually a mind reader in a way. It's constantly trying to predict what content you'll like based on what you've watched before."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
 
-AUDIENCE
-- "You can't tell someone to be obsessed. You have to make them feel like they discovered you." — https://youtube.com/@kallawaymarketing/videos
-- "Your audience isn't people who like your content. Your audience is people who want your identity." — https://youtube.com/@kallawaymarketing/videos
-- "10,000 people who would pay you $100 is better than 100,000 people who wouldn't pay you a dollar." — https://youtube.com/@kallawaymarketing/videos
+> "You need to understand that the algorithm is not your enemy. It is your distribution partner."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
 
-SHORT FORM
-- "If you're still filming horizontal for social, you're fighting the platform." — https://youtube.com/@kallawaymarketing/videos
-- "Your hook should work on mute. Add captions that emphasize the hook." — https://youtube.com/@kallawaymarketing/videos
-- "If you say 'like and subscribe,' I guarantee you half your audience doesn't know what they're subscribing FOR." — https://youtube.com/@kallawaymarketing/videos
-- "If there's a pause longer than 1 second, cut it." — https://youtube.com/@kallawaymarketing/videos
+> "There is no other time in history where a normal person could make something in their bedroom and have it shown to millions of people for free."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
 
-FINAL FRAMEWORK — THE SHORTFORM SYSTEM CORE
-- Swipe File: collect top 1% hooks from creators in your space
-- Hook Bank: 50 tested hooks ready to go
-- Script Templates: 5 narrative frameworks (Problem/Solution, Before/After, Myth vs Truth, Story/Lesson, Pattern Interrupt)
-- Batch Production: one day to write, one day to record, one day to edit
-- Distribution: same content, different hooks per platform
-- Iteration: what got 50% retention gets remixed. What got 80% gets turned into a series.
-- "The difference between someone who grows and someone who doesn't is not talent. It's having a system that makes you show up even when you don't feel like it."
+> "Posting time does not matter. Hashtags in your captions don't matter. The captions themselves don't matter. The only thing that matters is making great videos for a specific avatar group across a narrow band of topics over and over and over."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+> "That is the cake. Everything else is the icing. Focus on the cake."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+### SPECIFICITY & AVATAR [VERBATIM]
+
+> "Specificity beats generality every single time on social media. A video made for everyone is a video made for no one."
+— [How Social Media Algorithms Actually Work](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+> "You need to pick a specific avatar, a specific person that you are creating content for, and you need to create content that speaks directly to them. And you need to do this over and over and over again."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+> "If you treat the algorithm as your distribution partner, you will get a lot more leverage."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+### WATCH TIME [VERBATIM]
+
+> "The algorithm cares about one thing above all else. And that is watch time. Not likes, not comments, not shares. Watch time."
+— [How Social Media Algorithms Actually Work](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+> "The longer someone watches, the longer they stay on the platform. And that is the algorithm's only goal. So, you need to optimize for watch time above everything else."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+### CONTENT SYSTEMS [VERBATIM]
+
+> "What you typically see about the algorithm is talking about settings, hacks, or these little caption tweaks. None of that stuff actually works."
+— [How Social Media Algorithms Actually Work](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+> "Once you get the strategy right, the tactics become obvious."
+— [same source](https://www.youtube.com/watch?v=8cQidXgtGmU)
+
+### CONTENT SYSTEMS — COPY THIS SYSTEM [VERBATIM]
+
+> "The exact same system I'm personally running every single day. I've a million followers, I've done billions of views, and this month alone, I'll post over 50 unique short-form videos on Instagram alone."
+— [Copy This System, It'll Blow Up Your Social Media](https://www.youtube.com/watch?v=B9l9TRhu5Vw) [27K views]
+
+> "These are native premium short-form videos that'll get tens of millions of views and drive thousands of leads. The only way that much premium volume is possible is by building this type of content system."
+— [same source](https://www.youtube.com/watch?v=B9l9TRhu5Vw)
+
+### PERSONAL BRANDS — NEW ERA [VERBATIM]
+
+> "The most valuable thing you could build right now in 2026 is a premium personal brand. One that will actually survive and keep winning in the AI era."
+— [The NEW Era of Personal Brands is Here](https://www.youtube.com/watch?v=46t_cn0lx2E) [95K views]
+
+> "If you run a business, this should be your number one priority because it will give you a massive unfair advantage in the future."
+— [same source](https://www.youtube.com/watch?v=46t_cn0lx2E)
+
+> "I've studied hundreds of the top tier personal brands across every niche."
+— [same source](https://www.youtube.com/watch?v=46t_cn0lx2E)
 
 ## QUOTE RETRIEVAL INSTRUCTIONS
 
