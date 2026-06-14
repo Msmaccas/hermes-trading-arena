@@ -4,18 +4,25 @@ arena_runner.py — Self-contained unified weekly trading competition engine.
 MASTER entry point for the weekly trading competition.
 Runs autonomously as a no_agent cron job (Sunday 8AM SGT, script=arena_runner.py).
 
-THE CRITICAL DIFFERENCE: No hardcoded ticker lists. Scans ALL stocks in each market
-via TradingView scanner API (8 regions, up to 800 stocks), then computes indicators
-via yfinance for the entire universe.
+New Architecture (Phase 1/2/3):
+  Phase 1: TV scanner → scan ALL 11 global markets → raw tickers + yfinance data
+  Phase 2: Assign stocks to personas → ~50 UNIQUE stocks each (no overlap, sector-matched)
+  Phase 3: For each persona, analyze in parallel (max 3 concurrent) → each stock → individual file
+    * 3000+ word analysis in persona voice with verbatim SOUL.md quotes
+    * All 21 TV indicators analyzed (100+ words per)
+    * Real yfinance fundamentals
+    * Deep web research
+    * Saved as: 10_Trading/Competition/{persona}/{ticker} - YYYY-MM-DD.md
 
 Output:
-  10_Trading/Competition/{Persona} - YYYY-MM-DD.md  (Obsidian vault)
+  10_Trading/Competition/{Persona}/{Ticker} - YYYY-MM-DD.md
 """
 
 import os, sys, datetime, json, time, warnings, traceback, re
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 import threading
+import subprocess
 
 import numpy as np
 import yfinance as yf
@@ -45,7 +52,7 @@ GLOBAL_MARKET_DATA_PATH = "/tmp/global_market_data.json"
 
 TV_CDP_URL = "http://127.0.0.1:1234"  # TV Desktop CDP endpoint
 
-# ─── 8 MARKET REGIONS — TradingView scanner regions ──────────────────────────
+# ─── 11 MARKET REGIONS — TradingView scanner regions ─────────────────────────
 
 TV_MARKETS = {
     "US": "america",
@@ -79,6 +86,8 @@ DEEPSEEK_MODEL = "deepseek-chat"
 # Rate limiting for yfinance
 _yf_lock = threading.Lock()
 
+# ─── STOCKS PER PERSONA ──────────────────────────────────────────────────────
+STOCKS_PER_PERSONA = 50
 
 # ─── CONFIG LOADING ───────────────────────────────────────────────────────────
 
@@ -145,7 +154,7 @@ def _resolve_api_key():
         return
 
 
-# ─── TV CDP HANDSHAKE (Fix 1) ────────────────────────────────────────────────
+# ─── TV CDP HANDSHAKE ────────────────────────────────────────────────────────
 
 def wait_for_tv_cdp(url=TV_CDP_URL, timeout=30, interval=2):
     """
@@ -166,7 +175,6 @@ def wait_for_tv_cdp(url=TV_CDP_URL, timeout=30, interval=2):
             pass
         time.sleep(interval)
     return False
-
 
 # ─── TRADINGVIEW SCANNER API ─────────────────────────────────────────────────
 
@@ -242,7 +250,7 @@ def tv_scan_tickers(region):
 
 def global_tv_scan():
     """
-    Scan all 8 market regions via TradingView scanner API.
+    Scan all 11 market regions via TradingView scanner API.
     Returns a dict of {region: [list of ticker strings]} and a list of (ticker, region) pairs.
     """
     by_region = {}
@@ -264,11 +272,6 @@ def global_tv_scan():
 def convert_tv_ticker(ticker, region):
     """
     Convert a TradingView scanner ticker to yfinance-compatible format.
-
-    Edge cases handled:
-    - UK: replace embedded dots with dash (BT.A -> BT-A.L), strip trailing dots (NG. -> NG.L)
-    - Hong Kong: strip leading zeros from 5-digit codes (09988 -> 9988.HK)
-    - Everything else: append the region's exchange suffix
     """
     suffix_map = {
         "US": "",
@@ -319,7 +322,6 @@ def analyze_ticker(ticker_str):
     """Fetch real data for one ticker via yfinance.
     Computes RSI(14), MA50, MA200, volume ratio, P/E, EPS growth, market cap.
     """
-    # Ticker is already converted to yfinance format by caller (load_or_scan_market_data)
     try:
         stock = yf.Ticker(ticker_str)
         hist = stock.history(period="1y")
@@ -347,8 +349,11 @@ def analyze_ticker(ticker_str):
         vol_ratio = round(float(volume.iloc[-1]) / avg_vol, 2) if avg_vol > 0 else 1.0
 
         pe = info.get("trailingPE") or info.get("forwardPE")
+        eps = info.get("trailingEps") or info.get("forwardEps")
         eps_growth = info.get("earningsQuarterlyGrowth")
         sector = info.get("sector", "Unknown")
+        beta = info.get("beta")
+        dividend_yield = info.get("dividendYield")
 
         return {
             "ticker": ticker_str,
@@ -359,13 +364,15 @@ def analyze_ticker(ticker_str):
             "ma200": round(ma200, 2) if ma200 else None,
             "vol_ratio": vol_ratio,
             "pe": pe,
+            "eps": eps,
             "eps_growth": eps_growth,
             "mcap": mcap,
             "sector": sector,
+            "beta": beta,
+            "dividend_yield": dividend_yield,
         }
     except Exception as e:
         return {"ticker": ticker_str, "error": str(e)}
-
 
 def scan_market_data(ticker_list):
     """
@@ -388,453 +395,145 @@ def scan_market_data(ticker_list):
     return results
 
 
-# ─── TV MCP INDICATOR READING ────────────────────────────────────────────────
+# ─── TV INDICATOR COMPUTATION (local via yfinance + numpy) ───────────────────
 
-# Chrome CDP helpers for TradingView fallback
-_CHROME_CDP = "http://127.0.0.1:9222"
-_TV_CHART_URL = "https://www.tradingview.com/chart/"
-
-
-def _chrome_list_tabs():
-    """List open tabs via Chrome DevTools Protocol. Returns list of tab dicts."""
-    try:
-        r = requests.get(f"{_CHROME_CDP}/json", timeout=5)
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return []
+def _ema(values, period):
+    """Compute exponential moving average."""
+    weights = np.exp(np.linspace(-1, 0, period))
+    weights /= weights.sum()
+    return np.convolve(values, weights, mode='valid')
 
 
-def _chrome_create_tab(url=None):
-    """Create a new tab in Chrome CDP, optionally navigating to url."""
-    try:
-        payload = {"url": url or "about:blank"}
-        r = requests.put(f"{_CHROME_CDP}/json/new", json=payload, timeout=5)
-        if r.status_code == 200:
-            return r.json()
-    except Exception:
-        pass
-    return None
-
-
-def _chrome_evaluate(tab_id, js_expression):
+def compute_all_indicators(ticker):
     """
-    Evaluate JavaScript in a specific CDP tab via WebSocket.
-    Uses CDP Runtime.evaluate.
-    """
-    import json as _json
-    try:
-        # Fetch the WebSocket URL for this tab
-        tabs = _chrome_list_tabs()
-        ws_url = None
-        for tab in tabs:
-            if tab.get("id") == tab_id:
-                ws_url = tab.get("webSocketDebuggerUrl")
-                break
-        if not ws_url:
-            return None
-
-        from websocket import create_connection
-
-        ws = create_connection(ws_url, timeout=10)
-        cmd_id = 1
-        cmd = _json.dumps({
-            "id": cmd_id,
-            "method": "Runtime.evaluate",
-            "params": {
-                "expression": js_expression,
-                "returnByValue": True,
-                "awaitPromise": True,
-            }
-        })
-        ws.send(cmd)
-        response = ws.recv()
-        ws.close()
-        result = _json.loads(response)
-        if "result" in result and "result" in result["result"]:
-            return result["result"]["result"].get("value")
-        return None
-    except ImportError:
-        print(f"[Arena]  websocket-client not installed, skipping Chrome CDP JS eval", flush=True)
-        return None
-    except Exception:
-        return None
-
-
-def _chrome_navigate_and_read_studies(ticker):
-    """
-    Use Chrome CDP to navigate to a TradingView chart for the given ticker,
-    then extract visible study/indicator values from the page via JS injection.
-    Returns dict of study values or None on failure.
+    Compute 21 technical indicators for a single ticker via yfinance + numpy.
+    Returns dict of {indicator_name: value} or None on failure.
     """
     try:
-        # Check for websocket-client availability
-        try:
-            import websocket
-        except ImportError:
-            print(f"[Arena]  websocket-client not installed, skipping Chrome CDP reading", flush=True)
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="6mo")
+        if hist.empty or len(hist) < 30:
             return None
+        close = hist["Close"].values
+        high = hist["High"].values
+        low = hist["Low"].values
+        volume = hist["Volume"].values
 
-        tabs = _chrome_list_tabs()
-        if not tabs:
-            tab = _chrome_create_tab(_TV_CHART_URL + ticker)
-            if not tab:
-                return None
-            tab_id = tab.get("id")
-            time.sleep(3)
-        else:
-            tv_tab = None
-            for tab in tabs:
-                url = tab.get("url", "")
-                if "tradingview.com/chart" in url:
-                    tv_tab = tab
-                    break
-            if tv_tab:
-                tab_id = tv_tab["id"]
-                js_go = f"window.location.href = '{_TV_CHART_URL}{ticker}';"
-                _chrome_evaluate(tab_id, js_go)
-                time.sleep(4)
-            else:
-                tab = _chrome_create_tab(_TV_CHART_URL + ticker)
-                if not tab:
-                    return None
-                tab_id = tab.get("id")
-                time.sleep(3)
-
-        # Inject JS to extract study/indicator values
-        js_extract = """
-(async () => {
-    await new Promise(resolve => {
-        const check = () => {
-            if (window.tvWidget && window.tvWidget.chart) resolve();
-            else setTimeout(check, 200);
-        };
-        check();
-    });
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    try {
-        const chart = window.tvWidget.chart();
-        const studies = chart.getAllStudies();
-        const result = {};
-        for (const s of studies) {
-            try {
-                const vals = await chart.getStudyValues(s.id);
-                result[s.name] = vals;
-            } catch(e) {}
-        }
-        return JSON.stringify(result);
-    } catch(e) {
-        return JSON.stringify({error: e.message});
-    }
-})();
-"""
-        raw = _chrome_evaluate(tab_id, js_extract)
-        if raw and isinstance(raw, str):
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                pass
-        return None
-    except Exception:
-        return None
-
-
-def read_tv_mcp_indicators(ticker_list):
-    """
-    Read TradingView indicator values for the top tickers using a cascade:
-    1. Try TV Desktop CDP (port 1234) with data_get_pine_lines/labels and capture_screenshot
-    2. Compute standard indicators (RSI, MA50/200, MACD, BB, ATR) locally via yfinance + numpy
-    3. Cycle 21 indicators 2-at-a-time via chart_manage_indicator on free TV plan
-
-    Returns dict of {ticker: {indicator_name: value, ...}} or empty dict.
-    """
-    # Ensure hermes_env venv is on sys.path for websocket-client
-    import sys as _sys
-    _venv_site = os.path.expanduser('~/hermes_env/lib/python3.12/site-packages')
-    if os.path.isdir(_venv_site) and _venv_site not in _sys.path:
-        _sys.path.insert(0, _venv_site)
-
-    # ─── Local indicator computation via yfinance + numpy ───────────────
-    def _compute_local_indicators(ticker):
-        """Compute standard indicators locally for a single ticker."""
-        try:
-            stock = yf.Ticker(ticker)
-            hist = stock.history(period="6mo")
-            if hist.empty or len(hist) < 30:
-                return None
-            close = hist["Close"].values
-            high = hist["High"].values
-            low = hist["Low"].values
-            volume = hist["Volume"].values
-
-            result = {}
-            price = float(close[-1])
-
-            # RSI(14)
-            delta = np.diff(close)
-            gains = np.where(delta > 0, delta, 0)
-            losses = np.where(delta < 0, -delta, 0)
-            avg_gain = np.mean(gains[-14:]) if len(gains) >= 14 else np.mean(gains)
-            avg_loss = np.mean(losses[-14:]) if len(losses) >= 14 else np.mean(losses)
-            if avg_loss == 0:
-                result["RSI"] = 100.0
-            else:
-                rs = avg_gain / avg_loss
-                result["RSI"] = round(100.0 - (100.0 / (1.0 + rs)), 2)
-
-            # MA50 / MA200
-            if len(close) >= 50:
-                result["MA50"] = round(float(np.mean(close[-50:])), 2)
-            if len(close) >= 200:
-                result["MA200"] = round(float(np.mean(close[-200:])), 2)
-
-            # MACD (12, 26, 9)
-            if len(close) >= 26:
-                ema12 = _ema(close, 12)
-                ema26 = _ema(close, 26)
-                macd_line = ema12 - ema26
-                signal = _ema(macd_line, 9)
-                result["MACD"] = round(float(macd_line[-1]), 4)
-                result["MACD_signal"] = round(float(signal[-1]), 4)
-                result["MACD_histogram"] = round(float(macd_line[-1] - signal[-1]), 4)
-
-            # Bollinger Bands (20, 2)
-            if len(close) >= 20:
-                sma20 = np.mean(close[-20:])
-                std20 = np.std(close[-20:])
-                result["BB_upper"] = round(float(sma20 + 2 * std20), 2)
-                result["BB_middle"] = round(float(sma20), 2)
-                result["BB_lower"] = round(float(sma20 - 2 * std20), 2)
-                result["BB_width"] = round(float(4 * std20 / sma20 * 100), 2) if sma20 != 0 else 0
-
-            # ATR(14)
-            if len(high) >= 15:
-                tr = np.maximum(high[1:] - low[1:],
-                                np.maximum(np.abs(high[1:] - close[:-1]),
-                                           np.abs(low[1:] - close[:-1])))
-                result["ATR"] = round(float(np.mean(tr[-14:])), 4)
-                result["ATR_pct"] = round(result["ATR"] / price * 100, 2) if price > 0 else 0
-
-            # EMA 9, 21, 50, 200
-            for period in [9, 21]:
-                if len(close) >= period:
-                    result[f"EMA{period}"] = round(float(_ema(close, period)[-1]), 2)
-
-            # Volume
-            if len(volume) >= 20:
-                avg_vol = np.mean(volume[-20:])
-                result["Volume"] = int(volume[-1])
-                result["Volume_ratio"] = round(float(volume[-1] / avg_vol), 2) if avg_vol > 0 else 1.0
-
-            # Stochastic (14,3)
-            if len(close) >= 14:
-                low14 = np.min(low[-14:])
-                high14 = np.max(high[-14:])
-                k = (close[-1] - low14) / (high14 - low14) * 100 if (high14 - low14) > 0 else 50
-                result["Stoch_K"] = round(float(k), 2)
-                # Simplified D (3-period smoothing)
-                if len(close) >= 16:
-                    k_vals = []
-                    for i in range(-3, 0):
-                        l14 = np.min(low[-14 + i:i])
-                        h14 = np.max(high[-14 + i:i])
-                        kv = (close[i] - l14) / (h14 - l14) * 100 if (h14 - l14) > 0 else 50
-                        k_vals.append(kv)
-                    result["Stoch_D"] = round(float(np.mean(k_vals)), 2)
-
-            result["Price"] = round(price, 2)
-            return result
-        except Exception:
-            return None
-
-    def _ema(values, period):
-        """Compute exponential moving average."""
-        weights = np.exp(np.linspace(-1, 0, period))
-        weights /= weights.sum()
-        return np.convolve(values, weights, mode='valid')
-
-    # ─── TV CDP: data_get_pine_lines / data_get_pine_labels / capture_screenshot ──
-    def _tv_cdp_read(ticker):
-        """Read from TV Desktop CDP using pine lines, labels, and screenshot."""
-        try:
-            # Navigate to ticker
-            resp = requests.get(
-                f"{TV_CDP_URL}/navigate",
-                params={"symbol": ticker},
-                timeout=10,
-            )
-            if resp.status_code != 200:
-                return None
-            time.sleep(1)
-
-            data = {"ticker": ticker, "source": "tv_cdp"}
-
-            # Get pine lines (price levels, support/resistance, indicators plotted as lines)
-            try:
-                r_lines = requests.get(
-                    f"{TV_CDP_URL}/mcp_tradingview_data_get_pine_lines",
-                    timeout=10,
-                )
-                if r_lines.status_code == 200:
-                    lines_data = r_lines.json()
-                    data["pine_lines"] = lines_data
-            except Exception:
-                pass
-
-            # Get pine labels (annotated levels)
-            try:
-                r_labels = requests.get(
-                    f"{TV_CDP_URL}/mcp_tradingview_data_get_pine_labels",
-                    timeout=10,
-                )
-                if r_labels.status_code == 200:
-                    labels_data = r_labels.json()
-                    data["pine_labels"] = labels_data
-            except Exception:
-                pass
-
-            # Capture screenshot for visual chart data
-            try:
-                r_ss = requests.get(
-                    f"{TV_CDP_URL}/capture_screenshot",
-                    params={"symbol": ticker},
-                    timeout=15,
-                )
-                if r_ss.status_code == 200:
-                    data["screenshot_path"] = r_ss.json().get("path")
-            except Exception:
-                pass
-
-            # ─── Free TV plan: cycle indicators 2 at a time ─────────────
-            STANDARD_INDICATORS = [
-                "RSI", "MACD", "Bollinger Bands", "Moving Average Exponential",
-                "Volume", "ATR", "Stochastic", "Moving Average", "Ichimoku Cloud",
-                "Parabolic SAR", "Commodity Channel Index", "On Balance Volume",
-                "Money Flow Index", "Williams %R", "Awesome Oscillator",
-                "Chaikin Money Flow", "Rate of Change", "Elder-Ray Index",
-                "Keltner Channels", "Donchian Channels", "VWAP",
-            ]
-
-            # Add EMA periods and MA periods config
-            EMA_PERIODS = "9,21,50,200"
-            MA_PERIODS = "50,200"
-
-            read_indicators = []
-            # Cycle through 2 at a time
-            for i in range(0, len(STANDARD_INDICATORS), 2):
-                pair = STANDARD_INDICATORS[i:i+2]
-                indicator_data = {}
-                for ind_name in pair:
-                    try:
-                        # Configure indicator input if needed
-                        if ind_name == "Moving Average Exponential":
-                            params = {"name": ind_name, "length": EMA_PERIODS}
-                        elif ind_name == "Moving Average":
-                            params = {"name": ind_name, "length": MA_PERIODS}
-                        else:
-                            params = {"name": ind_name}
-
-                        # Add indicator
-                        r_add = requests.post(
-                            f"{TV_CDP_URL}/chart_manage_indicator",
-                            json={"action": "add", **params},
-                            timeout=10,
-                        )
-                        if r_add.status_code == 200:
-                            time.sleep(0.5)
-                            read_indicators.append(ind_name)
-                            # Try to read its values via pine lines
-                            try:
-                                r_lines2 = requests.get(
-                                    f"{TV_CDP_URL}/mcp_tradingview_data_get_pine_lines",
-                                    timeout=10,
-                                )
-                                if r_lines2.status_code == 200:
-                                    indicator_data[ind_name] = r_lines2.json()
-                            except Exception:
-                                pass
-
-                            # Remove indicator before adding next pair
-                            try:
-                                requests.post(
-                                    f"{TV_CDP_URL}/chart_manage_indicator",
-                                    json={"action": "remove", "name": ind_name},
-                                    timeout=5,
-                                )
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
-
-                if indicator_data:
-                    data[f"indicators_{i//2}"] = indicator_data
-
-            data["indicators_read"] = read_indicators
-            data["indicators_count"] = len(read_indicators)
-            print(f"[Arena]  TV CDP: read {len(read_indicators)} indicators for {ticker}", flush=True)
-
-            return data
-
-        except Exception:
-            return None
-
-    # ─── Main cascade ─────────────────────────────────────────────────
-    enhanced = {}
-    successful_tickers = 0
-
-    # First, compute local indicators for ALL tickers (reliable baseline)
-    print(f"[Arena]  Computing local indicators for {len(ticker_list)} tickers via yfinance...", flush=True)
-    local_results = {}
-    for ticker in ticker_list[:50]:
-        loc = _compute_local_indicators(ticker)
-        if loc:
-            local_results[ticker] = loc
-    if local_results:
-        print(f"[Arena]  Local indicators computed for {len(local_results)} tickers", flush=True)
-
-    # Attempt TV Desktop CDP for enhanced data
-    cdp_ok = wait_for_tv_cdp(timeout=10)
-    if cdp_ok:
-        print(f"[Arena]  TV Desktop CDP ready -- reading enhanced data...", flush=True)
-        for ticker in ticker_list[:50]:
-            tv_data = _tv_cdp_read(ticker)
-            if tv_data:
-                enhanced[ticker] = tv_data
-                successful_tickers += 1
-
-        if successful_tickers:
-            print(f"[Arena]  TV Desktop CDP: enhanced data for {successful_tickers} tickers", flush=True)
-
-    # Merge local indicators as baseline, overlay TV CDP data on top
-    merged = {}
-    for ticker in ticker_list[:50]:
-        entry = {}
-        # Start with local indicators
-        if ticker in local_results:
-            entry["local_indicators"] = local_results[ticker]
-        # Overlay TV CDP enhanced data
-        if ticker in enhanced:
-            entry["tv_cdp"] = enhanced[ticker]
-        if entry:
-            merged[ticker] = entry
-
-    if merged:
-        print(f"[Arena]  TV indicators: merged data for {len(merged)} tickers", flush=True)
-        return merged
-
-    # Fallback: return just local indicators if TV failed
-    if local_results:
-        print(f"[Arena]  TV CDP failed, returning local yfinance indicators only", flush=True)
         result = {}
-        for ticker, loc in local_results.items():
-            result[ticker] = {"local_indicators": loc}
+        price = float(close[-1])
+
+        # 1. RSI(14)
+        delta = np.diff(close)
+        gains = np.where(delta > 0, delta, 0)
+        losses = np.where(delta < 0, -delta, 0)
+        avg_gain = np.mean(gains[-14:]) if len(gains) >= 14 else np.mean(gains)
+        avg_loss = np.mean(losses[-14:]) if len(losses) >= 14 else np.mean(losses)
+        if avg_loss == 0:
+            result["RSI"] = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            result["RSI"] = round(100.0 - (100.0 / (1.0 + rs)), 2)
+
+        # 2. MA50, 3. MA200
+        if len(close) >= 50:
+            result["MA50"] = round(float(np.mean(close[-50:])), 2)
+        if len(close) >= 200:
+            result["MA200"] = round(float(np.mean(close[-200:])), 2)
+
+        # 4-6. MACD (12, 26, 9)
+        if len(close) >= 26:
+            ema12 = _ema(close, 12)
+            ema26 = _ema(close, 26)
+            macd_line = ema12 - ema26
+            signal = _ema(macd_line, 9)
+            result["MACD"] = round(float(macd_line[-1]), 4)
+            result["MACD_signal"] = round(float(signal[-1]), 4)
+            result["MACD_histogram"] = round(float(macd_line[-1] - signal[-1]), 4)
+
+        # 7-9. Bollinger Bands (20, 2)
+        if len(close) >= 20:
+            sma20 = np.mean(close[-20:])
+            std20 = np.std(close[-20:])
+            result["BB_upper"] = round(float(sma20 + 2 * std20), 2)
+            result["BB_middle"] = round(float(sma20), 2)
+            result["BB_lower"] = round(float(sma20 - 2 * std20), 2)
+            result["BB_width_pct"] = round(float(4 * std20 / sma20 * 100), 2) if sma20 != 0 else 0
+
+        # 10-11. ATR(14) + ATR%
+        if len(high) >= 15:
+            tr = np.maximum(high[1:] - low[1:],
+                            np.maximum(np.abs(high[1:] - close[:-1]),
+                                       np.abs(low[1:] - close[:-1])))
+            result["ATR"] = round(float(np.mean(tr[-14:])), 4)
+            result["ATR_pct"] = round(result["ATR"] / price * 100, 2) if price > 0 else 0
+
+        # 12-13. EMA 9, 21
+        for period in [9, 21]:
+            if len(close) >= period:
+                result[f"EMA{period}"] = round(float(_ema(close, period)[-1]), 2)
+
+        # 14-15. Volume + Volume ratio
+        if len(volume) >= 20:
+            avg_vol = np.mean(volume[-20:])
+            result["Volume"] = int(volume[-1])
+            result["Volume_ratio"] = round(float(volume[-1] / avg_vol), 2) if avg_vol > 0 else 1.0
+
+        # 16-17. Stochastic (14,3)
+        if len(close) >= 14:
+            low14 = np.min(low[-14:])
+            high14 = np.max(high[-14:])
+            k = (close[-1] - low14) / (high14 - low14) * 100 if (high14 - low14) > 0 else 50
+            result["Stoch_K"] = round(float(k), 2)
+            if len(close) >= 16:
+                k_vals = []
+                for i in range(-3, 0):
+                    l14 = np.min(low[-14 + i:i])
+                    h14 = np.max(high[-14 + i:i])
+                    kv = (close[i] - l14) / (h14 - l14) * 100 if (h14 - l14) > 0 else 50
+                    k_vals.append(kv)
+                result["Stoch_D"] = round(float(np.mean(k_vals)), 2)
+
+        # 18. Price
+        result["Price"] = round(price, 2)
+
+        # 19. 52-Week High/Low
+        if len(close) >= 252:
+            result["52w_high"] = round(float(np.max(close[-252:])), 2)
+            result["52w_low"] = round(float(np.min(close[-252:])), 2)
+        elif len(close) >= 1:
+            result["52w_high"] = round(float(np.max(close)), 2)
+            result["52w_low"] = round(float(np.min(close)), 2)
+
+        # 20. SMA20
+        if len(close) >= 20:
+            result["SMA20"] = round(float(np.mean(close[-20:])), 2)
+
+        # 21. Change %
+        if len(close) >= 2:
+            result["Change_pct"] = round(float((close[-1] - close[-2]) / close[-2] * 100), 2)
+
         return result
+    except Exception:
+        return None
 
-    print(f"[Arena]  All indicator routes failed", flush=True)
-    return {}
 
-# ─── CACHE / LOAD ─────────────────────────────────────────────────────────────
+def compute_indicators_batch(ticker_list):
+    """Compute indicators for a list of tickers using ThreadPoolExecutor."""
+    results = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        fut_map = {pool.submit(compute_all_indicators, t): t for t in ticker_list}
+        for fut in as_completed(fut_map):
+            t = fut_map[fut]
+            try:
+                data = fut.result()
+                if data:
+                    results[t] = data
+            except Exception:
+                pass
+    return results
+
+
+# ─── MARKET DATA CACHING ─────────────────────────────────────────────────────
 
 def load_or_scan_market_data():
     """
@@ -847,7 +546,6 @@ def load_or_scan_market_data():
             with open(GLOBAL_MARKET_DATA_PATH) as f:
                 data = json.load(f)
             by_region = data.get("by_region", {})
-            # Build a flat results dict from by_region
             results = {}
             for region, stocks in by_region.items():
                 for s in stocks:
@@ -860,10 +558,9 @@ def load_or_scan_market_data():
 
     print(f"[Arena]  No cached market data found. Running TV scanner + yfinance scan...", flush=True)
 
-    # Step 1: TV scanner — get all tickers across 8 regions
+    # Step 1: TV scanner — get all tickers across 11 regions
     tv_by_region, all_ticker_pairs = global_tv_scan()
-    # Convert each (bare_ticker, region) pair to yfinance format
-    raw_to_yf = {}  # mapping: yf_ticker -> (bare_ticker, region) for cache
+    raw_to_yf = {}
     yf_ticker_set = set()
     for bare_ticker, region in all_ticker_pairs:
         yf_ticker = convert_tv_ticker(bare_ticker, region)
@@ -873,26 +570,42 @@ def load_or_scan_market_data():
     ticker_list = sorted(yf_ticker_set)
     print(f"[Arena]  Total unique tickers from TV scan: {len(ticker_list)}", flush=True)
 
-    # Skip known penny stocks and ETFs by checking ticker patterns
-    # (Numeric-only tickers now carry exchange suffixes so they won't be wrongly filtered)
+    # Skip non-exchange numeric tickers
     ticker_list = [t for t in ticker_list if not (t[0].isdigit() and not any(t.endswith(suf) for suf in [".L", ".T", ".KS", ".NS", ".SA", ".HK", ".TW", ".IS", ".VN"]))]
     print(f"[Arena]  After ticker filter: {len(ticker_list)} tickers", flush=True)
 
-    # Sort so real stock names come first (not numerical tickers)
-    ticker_list.sort(key=lambda t: (t[0].isdigit(), t))
-    print(f"[Arena]  First 5 tickers: {ticker_list[:5]}", flush=True)
+    # FIX 3: Smarter yfinance Ticker Selection
+    def score_ticker(t):
+        """Score ticker by likelihood of having valid yfinance data."""
+        score = 0
+        known_suffixes = [".L", ".SA", ".HK", ".KS", ".NS", ".T", ".VN", ".IS", ".TW"]
+        suffix = next((s for s in known_suffixes if t.endswith(s)), None)
+        # US stocks (no suffix): +10 points
+        if suffix is None:
+            score += 10
+        # UK (.L), Brazil (.SA), HK (.HK): +5 points
+        elif suffix in (".L", ".SA", ".HK"):
+            score += 5
+        # Korea (.KS), India (.NS), Japan (.T): +3 points
+        elif suffix in (".KS", ".NS", ".T"):
+            score += 3
+        # Vietnam (.VN), Turkey (.IS): +1 point
+        elif suffix in (".VN", ".IS"):
+            score += 1
+        # Starts with digit AND no recognized suffix: -100 points
+        if t[0].isdigit() and suffix is None:
+            score -= 100
+        return score
 
-    # Limit yfinance calls to prevent rate limiting
-    MAX_YF_TICKERS = 300
-    if len(ticker_list) > MAX_YF_TICKERS:
-        ticker_list = ticker_list[:MAX_YF_TICKERS]
-        print(f"[Arena]  Limiting to {MAX_YF_TICKERS} tickers for yfinance", flush=True)
+    ticker_list.sort(key=score_ticker, reverse=True)
+    selected = ticker_list[:150]
+    print(f"[Arena]  Selected {len(selected)} tickers by yfinance likelihood score (top score={score_ticker(selected[0]) if selected else chr(39)+chr(78)+chr(47)+chr(65)+chr(39)})", flush=True)
+    ticker_list = selected
 
-    # Step 2: yfinance — compute indicators for all tickers
-    print(f"[Arena]  Computing indicators via yfinance for {len(ticker_list)} tickers...", flush=True)
+    print(f"[Arena]  Computing fundamentals via yfinance for {len(ticker_list)} tickers...", flush=True)
     raw_results = scan_market_data(ticker_list)
 
-    # Step 3: Build by_region from TV scan results + yfinance data
+    # Build by_region from TV scan + yfinance
     by_region = {}
     for region, tickers in tv_by_region.items():
         region_data = []
@@ -903,9 +616,15 @@ def load_or_scan_market_data():
         if region_data:
             by_region[region] = region_data
 
-    # Step 4: Cache the results (store region info so suffix conversion can be reapplied from cache)
-    # Store the yf_ticker, bare_ticker, and region in each result for cache reconstruction
-    # We augment the data dicts with metadata for cache-only use
+    # Compute full indicators for valid tickers
+    valid_tickers = [t for t, d in raw_results.items() if d and "error" not in d]
+    print(f"[Arena]  Computing full 21 indicators for {len(valid_tickers)} tickers...", flush=True)
+    indicators = compute_indicators_batch(valid_tickers)
+    for t, ind in indicators.items():
+        if t in raw_results and raw_results[t]:
+            raw_results[t]["indicators"] = ind
+
+    # Cache results
     try:
         cache_by_region = {}
         for region, stocks in by_region.items():
@@ -913,7 +632,6 @@ def load_or_scan_market_data():
             for s in stocks:
                 if s and "ticker" in s:
                     entry = dict(s)
-                    # Find the bare ticker for this yf_ticker
                     yf_t = s["ticker"]
                     bare_t, orig_region = raw_to_yf.get(yf_t, (yf_t, region))
                     entry["_raw_ticker"] = bare_t
@@ -927,6 +645,17 @@ def load_or_scan_market_data():
     except Exception as e:
         print(f"[Arena]  ⚠️  Failed to cache market data: {e}", flush=True)
 
+    returns_by_region = {}
+    for region, tickers in tv_by_region.items():
+        region_data = []
+        for bare_t in tickers:
+            yf_t = convert_tv_ticker(bare_t, region)
+            if yf_t in raw_results and raw_results[yf_t]:
+                region_data.append(raw_results[yf_t])
+        if region_data:
+            returns_by_region[region] = region_data
+
+    return returns_by_region, raw_results, False
 
 # ─── PERSONA SOUL LOADING ─────────────────────────────────────────────────────
 
@@ -946,7 +675,7 @@ def load_persona_soul(persona_name):
 
 # ─── DEEPSEEK API CALL ───────────────────────────────────────────────────────
 
-def call_deepseek(system_prompt, user_message, timeout=120):
+def call_deepseek(system_prompt, user_message, timeout=180, max_tokens=8192):
     """
     Call the DeepSeek chat API (OpenAI-compatible endpoint).
     Returns the response text or None on failure.
@@ -965,7 +694,7 @@ def call_deepseek(system_prompt, user_message, timeout=120):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
         "temperature": 0.7,
     }
 
@@ -984,61 +713,12 @@ def call_deepseek(system_prompt, user_message, timeout=120):
         return None
 
 
-# ─── PERSISTENCE ──────────────────────────────────────────────────────────────
-
-def save_persona_analysis(persona_name, analysis_text, top_picks, web_research_summary=None):
-    """
-    Save the persona's analysis to Obsidian vault.
-    Path: 10_Trading/Competition/{Persona} - YYYY-MM-DD.md
-    """
-    filename = f"{persona_name} - {DATE_STR}.md"
-    filepath = os.path.join(COMP_DIR, filename)
-
-    os.makedirs(COMP_DIR, exist_ok=True)
-
-    header = f"# {persona_name.title()} — {DATE_STR}\n\n"
-
-    content = header
-    content += "**Competition Analysis**\n\n"
-
-    if top_picks:
-        content += "## Top Picks\n\n"
-        for i, pick in enumerate(top_picks[:5], 1):
-            content += f"{i}. **{pick.get('ticker', '?')}**"
-            if pick.get("price"):
-                content += f" — ${pick['price']}"
-            if pick.get("target"):
-                content += f" → Target: ${pick['target']}"
-            if pick.get("reason"):
-                content += f"\n   *{pick['reason']}*"
-            content += "\n\n"
-
-    content += "## Analysis\n\n"
-    content += analysis_text
-
-    if web_research_summary:
-        content += "\n\n## Web Research — Top Pick Catalysts\n\n"
-        content += web_research_summary
-
-    content += f"\n\n---\n*Generated {DATE_STR} via Arena Runner*"
-
-    try:
-        with open(filepath, "w") as f:
-            f.write(content)
-        file_size = os.path.getsize(filepath)
-        print(f"[Arena]  ✓ Saved: {filename} ({file_size//1024}KB)", flush=True)
-        return True
-    except Exception as e:
-        print(f"[Arena]  ❌ Failed to save {filename}: {e}", flush=True)
-        return False
-
-
 # ─── WEB RESEARCH ─────────────────────────────────────────────────────────────
 
 def perform_web_research(ticker, persona_name):
     """
-    Search for recent news/catalysts for a given ticker using web search.
-    Returns a short summary string (or None).
+    Search for recent news/catalysts for a given ticker using yfinance news + web.
+    Returns a markdown summary string (or None).
     """
     try:
         stock = yf.Ticker(ticker)
@@ -1060,7 +740,7 @@ def perform_web_research(ticker, persona_name):
                     summary_parts.append(f"  {link}")
             return "\n".join(summary_parts)
 
-        # Fallback: try a simple requests-based search
+        # Fallback: Yahoo Finance news page
         search_url = f"https://finance.yahoo.com/quote/{ticker}/news"
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
@@ -1103,149 +783,1016 @@ def perform_web_research(ticker, persona_name):
         print(f"[Arena]  Web research error for {ticker}: {e}", file=sys.stderr)
         return None
 
+# ─── TV MCP INDICATOR READING (TV Desktop CDP) ──────────────────────────────
 
-# ─── PERSONA ANALYSIS PIPELINE ────────────────────────────────────────────────
-
-def extract_top_picks(analysis_text, prices_map=None):
-    """
-    Heuristically extract top 3-5 picks from an LLM analysis text.
-    Returns a list of dicts: [{"ticker": "...", "price": ..., "target": ..., "reason": "..."}, ...]
-    """
-    picks = []
-    if not analysis_text:
-        return picks
-
-    # Look for numbered lists referencing tickers
-    lines = analysis_text.split("\n")
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        m = re.match(r'^[\d\*\-\.\s#\)]+([A-Z]{1,5}(?:\.[A-Z]{2,5})?)\b', line)
-        if m:
-            ticker = m.group(1)
-            skip_words = {"THE", "THIS", "THAT", "WITH", "FROM", "THEN", "WILL",
-                          "HAVE", "BEEN", "CAN", "ALL", "ARE", "NOT", "FOR", "AND",
-                          "ITS", "HAS", "WAS", "BUT", "YOU", "YOUR", "WHAT", "WHEN",
-                          "WHY", "HOW", "WHO", "WHOM", "WHICH"}
-            if ticker in skip_words:
-                continue
-            target = None
-            price = None
-            reason = line
-
-            target_m = re.search(r'(?:target|price target|TP)[:\s]*\$?([\d,.]+)', line, re.IGNORECASE)
-            if target_m:
-                try:
-                    target = float(target_m.group(1).replace(",", ""))
-                except ValueError:
-                    pass
-
-            if prices_map and ticker in prices_map:
-                pd = prices_map[ticker]
-                if pd and "price" in pd and pd["price"]:
-                    price = pd["price"]
-
-            picks.append({
-                "ticker": ticker,
-                "price": price,
-                "target": target,
-                "reason": reason.strip(),
-            })
-
-    return picks[:5]
+# Chrome CDP helpers for TradingView fallback
+_CHROME_CDP = "http://127.0.0.1:9222"
+_TV_CHART_URL = "https://www.tradingview.com/chart/"
 
 
-def run_persona_analysis(persona_name, market_json, prices_map):
-    """
-    Run analysis for a single persona.
-    1. Load SOUL.md
-    2. Call DeepSeek API
-    3. Extract top picks
-    4. Web research for top pick
-    5. Save to Obsidian
-    """
-    soul_md = load_persona_soul(persona_name)
-    if not soul_md:
-        print(f"[Arena]  ⚠️  Skipping {persona_name} — no SOUL.md found", flush=True)
-        return False
-
-    market_data_str = json.dumps(market_json, indent=2, default=str)
-    truncated = market_data_str[:8000] if len(market_data_str) > 8000 else market_data_str
-
-    user_msg = (
-        f"Here is the global market scan data for today. "
-        f"Analyze using your exact methodology. "
-        f"Identify your top 3-5 picks with specific price targets. "
-        f"Use your exact voice.\n\n"
-        f"Market Data:\n{truncated}"
-    )
-
-    print(f"[Arena]  🧠 Running {persona_name} analysis...", flush=True)
-
-    analysis_text = call_deepseek(soul_md, user_msg)
-    if not analysis_text:
-        print(f"[Arena]  ❌ {persona_name} analysis failed", flush=True)
-        return False
-
-    top_picks = extract_top_picks(analysis_text, prices_map)
-
-    # Web research for top pick only
-    web_research = None
-    if top_picks:
-        top_ticker = top_picks[0]["ticker"]
-        print(f"[Arena]  🔍 Web research for {persona_name}'s top pick: {top_ticker}", flush=True)
-        web_research = perform_web_research(top_ticker, persona_name)
-
-    save_persona_analysis(persona_name, analysis_text, top_picks, web_research)
-    return True
+def _chrome_list_tabs():
+    """List open tabs via Chrome DevTools Protocol."""
+    try:
+        r = requests.get(f"{_CHROME_CDP}/json", timeout=5)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return []
 
 
-def run_all_personas(market_json, prices_map):
-    """
-    Run analysis for all 10 personas sequentially.
-    Each persona gets the full market context.
-    Returns (success_count, fail_count).
-    """
-    success = 0
-    fail = 0
+def _chrome_create_tab(url=None):
+    """Create a new tab in Chrome CDP, optionally navigating to url."""
+    try:
+        payload = {"url": url or "about:blank"}
+        r = requests.put(f"{_CHROME_CDP}/json/new", json=payload, timeout=5)
+        if r.status_code == 200:
+            return r.json()
+    except Exception:
+        pass
+    return None
 
-    for persona in PERSONAS:
-        ok = run_persona_analysis(persona, market_json, prices_map)
-        if ok:
-            success += 1
+
+def _chrome_evaluate(tab_id, js_expression):
+    """Evaluate JavaScript in a specific CDP tab via WebSocket."""
+    import json as _json
+    try:
+        tabs = _chrome_list_tabs()
+        ws_url = None
+        for tab in tabs:
+            if tab.get("id") == tab_id:
+                ws_url = tab.get("webSocketDebuggerUrl")
+                break
+        if not ws_url:
+            return None
+
+        from websocket import create_connection
+
+        ws = create_connection(ws_url, timeout=10)
+        cmd_id = 1
+        cmd = _json.dumps({
+            "id": cmd_id,
+            "method": "Runtime.evaluate",
+            "params": {
+                "expression": js_expression,
+                "returnByValue": True,
+                "awaitPromise": True,
+            }
+        })
+        ws.send(cmd)
+        response = ws.recv()
+        ws.close()
+        result = _json.loads(response)
+        if "result" in result and "result" in result["result"]:
+            return result["result"]["result"].get("value")
+        return None
+    except ImportError:
+        print(f"[Arena]  websocket-client not installed, skipping Chrome CDP JS eval", flush=True)
+        return None
+    except Exception:
+        return None
+
+
+def _chrome_navigate_and_read_studies(ticker):
+    """Navigate Chrome to TV chart for ticker, extract study values via JS."""
+    try:
+        try:
+            import websocket
+        except ImportError:
+            return None
+
+        tabs = _chrome_list_tabs()
+        if not tabs:
+            tab = _chrome_create_tab(_TV_CHART_URL + ticker)
+            if not tab:
+                return None
+            tab_id = tab.get("id")
+            time.sleep(3)
         else:
-            fail += 1
+            tv_tab = None
+            for tab in tabs:
+                url = tab.get("url", "")
+                if "tradingview.com/chart" in url:
+                    tv_tab = tab
+                    break
+            if tv_tab:
+                tab_id = tv_tab["id"]
+                js_go = f"window.location.href = '{_TV_CHART_URL}{ticker}';"
+                _chrome_evaluate(tab_id, js_go)
+                time.sleep(4)
+            else:
+                tab = _chrome_create_tab(_TV_CHART_URL + ticker)
+                if not tab:
+                    return None
+                tab_id = tab.get("id")
+                time.sleep(3)
 
-    return success, fail
+        js_extract = """
+(async () => {
+    await new Promise(resolve => {
+        const check = () => {
+            if (window.tvWidget && window.tvWidget.chart) resolve();
+            else setTimeout(check, 200);
+        };
+        check();
+    });
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+        const chart = window.tvWidget.chart();
+        const studies = chart.getAllStudies();
+        const result = {};
+        for (const s of studies) {
+            try {
+                const vals = await chart.getStudyValues(s.id);
+                result[s.name] = vals;
+            } catch(e) {}
+        }
+        return JSON.stringify(result);
+    } catch(e) {
+        return JSON.stringify({error: e.message});
+    }
+})();
+"""
+        raw = _chrome_evaluate(tab_id, js_extract)
+        if raw and isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                pass
+        return None
+    except Exception:
+        return None
 
+
+def read_tv_mcp_indicators(ticker_list):
+    """
+    Read TradingView indicator values for tickers using cascade:
+    1. Try TV Desktop CDP (port 1234) with pine lines/labels + screenshot + indicator cycling
+    2. Compute indicators locally via yfinance + numpy as fallback
+    3. Merge: local indicators baseline, TV CDP data overlay
+
+    Returns dict of {ticker: {local_indicators: {...}, tv_cdp: {...}}} or empty dict.
+    """
+    import sys as _sys
+    _venv_site = os.path.expanduser('~/hermes_env/lib/python3.12/site-packages')
+    if os.path.isdir(_venv_site) and _venv_site not in _sys.path:
+        _sys.path.insert(0, _venv_site)
+
+    # ─── TV CDP reading ────────────────────────────────────────────────
+    def _tv_cdp_read(ticker):
+        """Read from TV Desktop CDP: pine lines, labels, screenshot, indicator cycling."""
+        try:
+            resp = requests.get(
+                f"{TV_CDP_URL}/navigate",
+                params={"symbol": ticker},
+                timeout=10,
+            )
+            if resp.status_code != 200:
+                return None
+            time.sleep(1)
+
+            data = {"ticker": ticker, "source": "tv_cdp"}
+
+            # Pine lines
+            try:
+                r_lines = requests.get(
+                    f"{TV_CDP_URL}/mcp_tradingview_data_get_pine_lines",
+                    timeout=10,
+                )
+                if r_lines.status_code == 200:
+                    data["pine_lines"] = r_lines.json()
+            except Exception:
+                pass
+
+            # Pine labels
+            try:
+                r_labels = requests.get(
+                    f"{TV_CDP_URL}/mcp_tradingview_data_get_pine_labels",
+                    timeout=10,
+                )
+                if r_labels.status_code == 200:
+                    data["pine_labels"] = r_labels.json()
+            except Exception:
+                pass
+
+            # Screenshot
+            try:
+                r_ss = requests.get(
+                    f"{TV_CDP_URL}/capture_screenshot",
+                    params={"symbol": ticker},
+                    timeout=15,
+                )
+                if r_ss.status_code == 200:
+                    data["screenshot_path"] = r_ss.json().get("path")
+            except Exception:
+                pass
+
+            # Cycle 21 indicators 2 at a time via chart_manage_indicator
+            STANDARD_INDICATORS = [
+                "RSI", "MACD", "Bollinger Bands", "Moving Average Exponential",
+                "Volume", "ATR", "Stochastic", "Moving Average", "Ichimoku Cloud",
+                "Parabolic SAR", "Commodity Channel Index", "On Balance Volume",
+                "Money Flow Index", "Williams %R", "Awesome Oscillator",
+                "Chaikin Money Flow", "Rate of Change", "Elder-Ray Index",
+                "Keltner Channels", "Donchian Channels", "VWAP",
+            ]
+
+            read_indicators = []
+            indicator_data = {}
+            for i in range(0, len(STANDARD_INDICATORS), 2):
+                batch = STANDARD_INDICATORS[i:i+2]
+                for ind_name in batch:
+                    try:
+                        resp_add = requests.post(
+                            f"{TV_CDP_URL}/chart_manage_indicator",
+                            json={"action": "add", "name": ind_name},
+                            timeout=10,
+                        )
+                        if resp_add.status_code == 200:
+                            read_indicators.append(ind_name)
+                        time.sleep(1)
+                    except Exception:
+                        pass
+
+                time.sleep(2)
+
+                for ind_name in batch:
+                    try:
+                        r_lines2 = requests.get(
+                            f"{TV_CDP_URL}/mcp_tradingview_data_get_pine_lines",
+                            timeout=10,
+                        )
+                        if r_lines2.status_code == 200:
+                            indicator_data[ind_name] = r_lines2.json()
+                    except Exception:
+                        pass
+
+                    try:
+                        requests.post(
+                            f"{TV_CDP_URL}/chart_manage_indicator",
+                            json={"action": "remove", "name": ind_name},
+                            timeout=5,
+                        )
+                    except Exception:
+                        pass
+
+            if indicator_data:
+                data["tv_indicators"] = indicator_data
+            data["indicators_read"] = read_indicators
+
+            return data
+        except Exception:
+            return None
+
+    # ─── Main cascade ──────────────────────────────────────────────────
+    enhanced = {}
+    successful_tickers = 0
+
+    cdp_ok = wait_for_tv_cdp(timeout=10)
+    if cdp_ok:
+        print(f"[Arena]  TV Desktop CDP ready -- reading enhanced data...", flush=True)
+        for ticker in ticker_list[:50]:
+            tv_data = _tv_cdp_read(ticker)
+            if tv_data:
+                enhanced[ticker] = tv_data
+                successful_tickers += 1
+
+        if successful_tickers:
+            print(f"[Arena]  TV Desktop CDP: enhanced data for {successful_tickers} tickers", flush=True)
+
+    # Compute local indicators as baseline for ALL tickers
+    print(f"[Arena]  Computing local indicators for {len(ticker_list)} tickers via yfinance...", flush=True)
+    local_results = compute_indicators_batch(ticker_list[:50])
+    if local_results:
+        print(f"[Arena]  Local indicators computed for {len(local_results)} tickers", flush=True)
+
+    # Merge
+    merged = {}
+    for ticker in ticker_list[:50]:
+        entry = {}
+        if ticker in local_results:
+            entry["local_indicators"] = local_results[ticker]
+        if ticker in enhanced:
+            entry["tv_cdp"] = enhanced[ticker]
+        if entry:
+            merged[ticker] = entry
+
+    if merged:
+        print(f"[Arena]  TV indicators: merged data for {len(merged)} tickers", flush=True)
+        return merged
+    elif local_results:
+        print(f"[Arena]  TV CDP failed, returning local yfinance indicators only", flush=True)
+        result = {}
+        for ticker, loc in local_results.items():
+            result[ticker] = {"local_indicators": loc}
+        return result
+
+    print(f"[Arena]  No indicator data available", flush=True)
+    return {}
+
+# ─── PERSONA SCREENING FUNCTIONS ──────────────────────────────────────────
+
+def _safe_float(v):
+    """Convert value to float, return None if not possible."""
+    if v is None: return None
+    try: return float(v)
+    except: return None
+
+def filter_by_persona_criteria(persona, stock):
+    """
+    FIX 1: Phase 2b - Filter stock against a specific persona's methodology criteria.
+    Only stocks that PASS should be analyzed.
+    Returns (passes: bool, reason: str).
+    """
+    price = _safe_float(stock.get("price"))
+    pe = _safe_float(stock.get("pe"))
+    eps = _safe_float(stock.get("eps"))
+    eps_growth = _safe_float(stock.get("eps_growth"))
+    rsi = _safe_float(stock.get("rsi"))
+    ma50 = _safe_float(stock.get("ma50"))
+    ma200 = _safe_float(stock.get("ma200"))
+    mcap = _safe_float(stock.get("mcap"))
+    vol_ratio = _safe_float(stock.get("vol_ratio"))
+    change_pct = _safe_float(stock.get("change_pct"))
+    volume = stock.get("volume")
+    if volume is None:
+        volume = stock.get("Volume")
+    volume_f = _safe_float(volume) if volume is not None else None
+
+    if persona == "oneil":
+        if pe is None or pe <= 0:
+            return False, "PE missing or non-positive"
+        if pe < 5 or pe > 50:
+            return False, f"PE {pe:.1f} outside 5-50 range"
+        if eps_growth is None or eps_growth <= 0:
+            return False, "No positive EPS growth"
+        if rsi is not None and rsi <= 30:
+            return False, f"RSI {rsi:.0f} <= 30"
+        if ma50 is not None and price is not None and price <= ma50:
+            return False, f"Price ${price:.2f} <= MA50 ${ma50:.2f}"
+        if price is None:
+            return False, "No price data"
+        return True, "Passes O'Neil: PE 5-50, positive EPS growth, RSI>30, price>MA50"
+
+    if persona == "buffet":
+        if pe is None or pe <= 0:
+            return False, "PE missing or non-positive"
+        if pe < 5 or pe > 25:
+            return False, f"PE {pe:.1f} outside 5-25 range"
+        if eps is None or eps <= 0:
+            return False, "No positive EPS"
+        if mcap is None:
+            return False, "Market cap missing"
+        if mcap < 1e9:
+            return False, "Market cap < 1B"
+        if price is None:
+            return False, "No price data"
+        return True, "Passes Buffett: PE 5-25, EPS>0, mcap>1B"
+
+    if persona == "lynch":
+        if pe is None or pe <= 0:
+            return False, "PE missing or non-positive"
+        if eps_growth is None or eps_growth <= 0:
+            return False, "No positive EPS growth"
+        if eps_growth is not None and eps_growth > 0:
+            peg = pe / (eps_growth * 100)
+            if peg >= 3.0:
+                return False, f"PEG {peg:.2f} >= 3.0"
+        if price is None:
+            return False, "No price data"
+        return True, "Passes Lynch: PE>0, EPS growth>0, PEG<3.0"
+
+    if persona == "minervini":
+        if price is None:
+            return False, "No price data"
+        if ma50 is not None and price <= ma50:
+            return False, f"Price ${price:.2f} <= MA50 ${ma50:.2f}"
+        if ma200 is not None and ma50 is not None and ma50 <= ma200:
+            return False, f"MA50 ${ma50:.2f} <= MA200 ${ma200:.2f}"
+        if rsi is not None and (rsi < 30 or rsi > 80):
+            return False, f"RSI {rsi:.0f} outside 30-80 range"
+        if eps_growth is not None and eps_growth <= 0:
+            return False, "Negative EPS growth"
+        return True, "Passes Minervini: trend template, RSI 30-80"
+
+    if persona == "qullamaggie":
+        if price is None:
+            return False, "No price data"
+        conditions_met = 0
+        if vol_ratio is not None and vol_ratio > 1.0:
+            conditions_met += 1
+        if change_pct is not None and change_pct > 2:
+            conditions_met += 1
+        if ma50 is not None and price > ma50:
+            conditions_met += 1
+        if conditions_met == 0:
+            return False, "No criteria met: need VR>1.0 OR change>2% OR price>MA50"
+        return True, f"Passes Qullamaggie: {conditions_met}/3 criteria met"
+
+    if persona == "david-ryan":
+        if eps_growth is not None:
+            if eps_growth > 0.1:
+                return True, f"Passes David Ryan: EPS growth {eps_growth*100:.1f}% > 10%"
+        if ma50 is not None and price is not None and price > ma50:
+            return True, "Passes David Ryan: price > MA50 (no EPS)"
+        if eps_growth is not None:
+            return False, f"EPS growth {eps_growth*100:.1f}% <= 10%"
+        return False, "No criteria met: need EPS growth>10% OR price>MA50"
+
+    if persona == "matt-caruso":
+        if price is None:
+            return False, "No price data"
+        if price <= 2.0:
+            return False, f"Price ${price:.2f} <= $2.0"
+        if volume_f is not None and volume_f <= 50000:
+            return False, f"Volume {volume_f:.0f} <= 50000"
+        return True, "Passes Caruso: price>2, volume>50000"
+
+    if persona == "brian-shannon":
+        if price is None:
+            return False, "No price data"
+        conditions_met = 0
+        if ma50 is not None and price > ma50:
+            conditions_met += 1
+        if rsi is not None and rsi > 40:
+            conditions_met += 1
+        if conditions_met == 0:
+            return False, "Need price>MA50 OR RSI>40"
+        return True, "Passes Shannon: uptrend or RSI>40"
+
+    if persona == "dan-zanger":
+        if price is None:
+            return False, "No price data"
+        conditions_met = 0
+        if change_pct is not None and change_pct > 1:
+            conditions_met += 1
+        if vol_ratio is not None and vol_ratio > 1.2:
+            conditions_met += 1
+        if ma50 is not None and price > ma50:
+            conditions_met += 1
+        if conditions_met == 0:
+            return False, "Need change>1% OR VR>1.2 OR price>MA50"
+        return True, f"Passes Zanger: {conditions_met}/3 criteria met"
+
+    if persona == "nick-schmidt":
+        if price is None:
+            return False, "No price data"
+        conditions_met = 0
+        if ma50 is not None and price > ma50:
+            conditions_met += 1
+        if rsi is not None and rsi > 40:
+            conditions_met += 1
+        if conditions_met == 0:
+            return False, "Need price>MA50 OR RSI>40"
+        return True, "Passes Schmidt: uptrend or RSI>40"
+
+    return False, f"Unknown persona: {persona}"
+
+
+
+
+def passes_oneil(stock):
+    """CAN SLIM pre-check: EPS growth > 0, price above MA50, PE > 0, RSI > 30"""
+    price = _safe_float(stock.get("price"))
+    pe = _safe_float(stock.get("pe"))
+    eps = _safe_float(stock.get("eps_growth"))
+    rsi = _safe_float(stock.get("rsi"))
+    ma50 = _safe_float(stock.get("ma50"))
+    mcap = _safe_float(stock.get("mcap"))
+    
+    if pe is None or pe <= 0: return False, "Negative/no P/E"
+    if eps is None or eps <= 0: return False, "No EPS growth"
+    if price is None: return False, "No price data"
+    if ma50 and price < ma50 * 0.8: return False, "Price too far below 50-MA"
+    if rsi is not None and rsi < 30: return False, "RSI oversold"
+    if mcap and mcap < 50e6: return False, "Market cap too small"
+    return True, "Passes CAN SLIM pre-check"
+
+def passes_buffett(stock):
+    """4 Gates: P/E 5-20, positive EPS, mcap > 10B, reasonable sector"""
+    price = _safe_float(stock.get("price"))
+    pe = _safe_float(stock.get("pe"))
+    eps = _safe_float(stock.get("eps_growth"))
+    mcap = _safe_float(stock.get("mcap"))
+    sector = stock.get("sector", "")
+    
+    if pe is None or pe < 5 or pe > 20: return False, f"P/E {pe} outside 5-20 range"
+    if eps is None or eps < 0: return False, "No positive earnings growth"
+    if mcap is None or mcap < 1e9: return False, "Market cap under B"
+    if price is None or price < 2: return False, "Price too low"
+    if sector in ["Unknown", ""]: return False, "Unknown sector"
+    return True, "Passes 4 Gates"
+
+def passes_lynch(stock):
+    """PEG ratio < 2.0 or reasonable story stock"""
+    pe = _safe_float(stock.get("pe"))
+    eps = _safe_float(stock.get("eps_growth"))
+    price = _safe_float(stock.get("price"))
+    
+    if pe is None or pe <= 0: return False, "No P/E"
+    if eps is None or eps <= 0: return False, "No earnings growth for PEG"
+    peg = pe / (eps * 100) if eps > 0 else None
+    if peg and peg > 3.0: return False, f"PEG {peg:.2f} too high"
+    if price is None or price < 1: return False, "Price too low"
+    if peg:
+        return True, f"PEG {peg:.2f}"
+    return True, "Passes Lynch"
+
+def passes_minervini(stock):
+    """VCP/SEPA: price > 50MA > 200MA, RSI 30-75, positive EPS"""
+    price = _safe_float(stock.get("price"))
+    ma50 = _safe_float(stock.get("ma50"))
+    ma200 = _safe_float(stock.get("ma200"))
+    rsi = _safe_float(stock.get("rsi"))
+    eps = _safe_float(stock.get("eps_growth"))
+    mcap = _safe_float(stock.get("mcap"))
+    
+    if price is None: return False, "No price"
+    if ma50 and price < ma50: return False, "Price below 50-MA"
+    if ma200 and price < ma200: return False, "Price below 200-MA"
+    if rsi is not None and (rsi < 30 or rsi > 80): return False, f"RSI {rsi:.0f} outside range"
+    if eps is not None and eps < 0: return False, "Negative EPS growth"
+    if mcap and mcap < 50e6: return False, "Too small"
+    return True, "Passes trend template"
+
+def passes_qullamaggie(stock):
+    """Episodic pivot: VR > 1.2, change > 2%, price > 5"""
+    price = _safe_float(stock.get("price"))
+    vr = _safe_float(stock.get("vol_ratio"))
+    chg = _safe_float(stock.get("change_pct"))
+    mcap = _safe_float(stock.get("mcap"))
+    
+    if price is None or price < 3: return False, "Price too low for momentum"
+    if vr is None or vr < 1.0: return False, f"Volume ratio {vr} too low"
+    if chg is None or abs(chg) < 1.0: return False, f"Change {chg}% too small"
+    if mcap and mcap < 20e6: return False, "Too small for momentum"
+    return True, f"VR {vr:.1f}x Chg {chg:+.1f}%"
+
+def passes_david_ryan(stock):
+    """Earnings acceleration: EPS > 10%, price > MA50, positive P/E"""
+    price = _safe_float(stock.get("price"))
+    eps = _safe_float(stock.get("eps_growth"))
+    pe = _safe_float(stock.get("pe"))
+    vr = _safe_float(stock.get("vol_ratio"))
+    
+    if eps is None or eps < 0.1: return False, "EPS growth too low"
+    if pe is None or pe <= 0: return False, "No P/E"
+    if price is None: return False, "No price"
+    if vr is not None and vr < 0.5: return False, "Volume too light"
+    return True, f"EPS {eps:.1f}% PE {pe:.0f}"
+
+def passes_caruso(stock):
+    """ATR-based: has price data, some volatility, positive direction"""
+    price = _safe_float(stock.get("price"))
+    chg = _safe_float(stock.get("change_pct"))
+    
+    if price is None or price < 2: return False, "Price too low"
+    if chg is None: return False, "No change data"
+    return True, "Passes volatility check"
+
+def passes_shannon(stock):
+    """AVWAP trend: price near MA50/200, clear trend structure"""
+    price = _safe_float(stock.get("price"))
+    ma50 = _safe_float(stock.get("ma50"))
+    ma200 = _safe_float(stock.get("ma200"))
+    
+    if price is None: return False, "No price"
+    if ma50 and abs(price - ma50) / ma50 > 0.3: return False, "Price too far from 50-MA"
+    if ma200 and abs(price - ma200) / ma200 > 0.5: return False, "Price too far from 200-MA"
+    return True, "Trend structure OK"
+
+def passes_zanger(stock):
+    """Corkscrew: high VR, significant change, price > 3"""
+    price = _safe_float(stock.get("price"))
+    vr = _safe_float(stock.get("vol_ratio"))
+    chg = _safe_float(stock.get("change_pct"))
+    
+    if price is None or price < 3: return False, "Price too low"
+    if vr is None or vr < 1.0: return False, "No unusual volume"
+    if chg is None or abs(chg) < 0.5: return False, "Change too small"
+    return True, f"VR {vr:.1f}x"
+
+def passes_schmidt(stock):
+    """Weekly SMA: price > MA50 > MA200 structure"""
+    price = _safe_float(stock.get("price"))
+    ma50 = _safe_float(stock.get("ma50"))
+    ma200 = _safe_float(stock.get("ma200"))
+    
+    if price is None: return False, "No price"
+    if ma50 and price < ma50: return False, "Price below 10-week SMA"
+    if ma200 and price < ma200: return False, "Price below 30-week SMA"
+    return True, "Price above both SMAs"
+
+PERSONA_SCREENING = {
+    "oneil": passes_oneil,
+    "buffet": passes_buffett,
+    "lynch": passes_lynch,
+    "minervini": passes_minervini,
+    "qullamaggie": passes_qullamaggie,
+    "david-ryan": passes_david_ryan,
+    "matt-caruso": passes_caruso,
+    "brian-shannon": passes_shannon,
+    "dan-zanger": passes_zanger,
+    "nick-schmidt": passes_schmidt,
+}
+
+# ─── PHASE 2: ASSIGN STOCKS TO PERSONAS ──────────────────────────────────────
+
+def assign_stocks_to_personas(flat_results):
+    """
+    Phase 2: Screen ALL valid stocks against EACH persona's documented criteria.
+    Uses filter_by_persona_criteria for persona-specific methodology filters.
+    Only assign stocks that PASS the persona's methodology.
+    
+    Returns dict of {persona_name: {ticker: stock_data}}
+    """
+    from collections import defaultdict
+    
+    valid_stocks = {t: d for t, d in flat_results.items() 
+                    if d and "error" not in d and d.get("price")}
+    
+    persona_stocks = defaultdict(dict)
+    
+    for persona in PERSONAS:
+        pass_count = 0
+        fail_count = 0
+        fail_reasons = {}
+        for ticker, data in valid_stocks.items():
+            passes, reason = filter_by_persona_criteria(persona, data)
+            if passes:
+                persona_stocks[persona][ticker] = data
+                pass_count += 1
+            else:
+                fail_count += 1
+                short_reason = reason.split(":")[0] if ":" in reason else reason[:30]
+                fail_reasons[short_reason] = fail_reasons.get(short_reason, 0) + 1
+
+        top_fails = sorted(fail_reasons.items(), key=lambda x: -x[1])[:5]
+        fail_summary = ", ".join(f"{r}:{c}" for r, c in top_fails)
+        print(f"[Arena]  Phase 2b: {persona}: {pass_count} PASS / {fail_count} FAIL (top fail reasons: {fail_summary})", flush=True)
+
+    return dict(persona_stocks)
+
+
+
+
+
+# ─── PHASE 3: SPAWN PERSONA SUBAGENTS VIA PROCESS POOL ──────────────────────
+
+# Workers directory for individual persona analysis scripts
+WORKERS_DIR = os.path.expanduser("~/.hermes/scripts/arena_workers")
+
+PERSONA_WORKER_SCRIPT = os.path.join(WORKERS_DIR, "persona_worker.py")
+
+# 21 indicators for reference
+INDICATOR_NAMES = [
+    "RSI", "MA50", "MA200", "MACD", "MACD_signal", "MACD_histogram",
+    "BB_upper", "BB_middle", "BB_lower", "BB_width_pct",
+    "ATR", "ATR_pct", "EMA9", "EMA21",
+    "Volume", "Volume_ratio", "Stoch_K", "Stoch_D",
+    "Price", "52w_high", "52w_low", "SMA20", "Change_pct"
+]
+
+
+def generate_persona_worker_script():
+    """
+    Write the persona_worker.py sub-script that handles individual persona analysis.
+    Each worker:
+      - Gets: stock list, SOUL.md content, yfinance data, TV indicator data
+      - For EACH stock: writes 3000+ word analysis as individual file
+      - Returns: list of {ticker, word_count, file_path}
+    """
+    os.makedirs(WORKERS_DIR, exist_ok=True)
+    
+    script = r'''#!/usr/bin/env python3
+"""
+persona_worker.py — Individual persona analysis worker.
+Spawned by arena_runner.py Phase 3 for each persona.
+Writes one file per stock: 10_Trading/Competition/{persona}/{ticker} - YYYY-MM-DD.md
+
+Args via stdin JSON:
+{
+  "persona": "oneil",
+  "stocks": {ticker: {fundamental_data}},
+  "soul": "SOUL.md content",
+  "date_str": "YYYY-MM-DD",
+  "comp_dir": "/path/to/Competition",
+  "indicators": {ticker: {indicator_data}},
+  "tv_mcp": {ticker: {tv_cdp_data}},
+  "deepseek_key": "sk-...",
+  "deepseek_url": "https://api.deepseek.com/v1",
+}
+"""
+import sys, json, os, datetime, time, warnings
+import numpy as np
+import yfinance as yf
+import requests
+warnings.filterwarnings("ignore")
+
+def call_deepseek(system_prompt, user_message, api_key, base_url, timeout=180, max_tokens=8192):
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": system_prompt[:12000]},
+            {"role": "user", "content": user_message[:20000]},
+        ],
+        "max_tokens": max_tokens,
+        "temperature": 0.7,
+    }
+    try:
+        resp = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return None
+
+
+def perform_web_research(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        news = None
+        try:
+            news = stock.news
+        except Exception:
+            pass
+        if news and len(news) > 0:
+            items = news[:5]
+            parts = [f"### Recent News for {ticker}"]
+            for item in items:
+                title = item.get("title", "?")
+                link = item.get("link", "")
+                publisher = item.get("publisher", "")
+                parts.append(f"- **{title}** ({publisher})")
+                if link:
+                    parts.append(f"  {link}")
+            return "\n".join(parts)
+        search_url = f"https://finance.yahoo.com/quote/{ticker}/news"
+        headers_ua = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+        try:
+            resp = requests.get(search_url, headers=headers_ua, timeout=10)
+            if resp.status_code == 200:
+                from html.parser import HTMLParser
+                class HP(HTMLParser):
+                    def __init__(self):
+                        super().__init__()
+                        self.h = []
+                        self._cap = False
+                    def handle_starttag(self, tag, attrs):
+                        if tag == "h3": self._cap = True
+                    def handle_data(self, data):
+                        if self._cap:
+                            t = data.strip()
+                            if t and len(t) > 10: self.h.append(t)
+                            self._cap = False
+                parser = HP()
+                parser.feed(resp.text)
+                if parser.h:
+                    return "### Recent Headlines for " + ticker + "\n" + "\\n".join(f"- {h}" for h in parser.h[:5])
+        except Exception:
+            pass
+        return None
+    except Exception:
+        return None
+
+
+def write_stock_analysis(persona, stock_data_dict, soul, date_str, comp_dir, all_indicators, tv_mcp_data, deepseek_key, deepseek_url):
+    """Write a single stock analysis file. Returns {ticker, word_count, file_path}."""
+    ticker = stock_data_dict.get("ticker", "?")
+    price = stock_data_dict.get("price", "?")
+    sector = stock_data_dict.get("sector", "Unknown")
+    change_pct = stock_data_dict.get("change_pct", 0)
+    rsi = stock_data_dict.get("rsi")
+    ma50 = stock_data_dict.get("ma50")
+    ma200 = stock_data_dict.get("ma200")
+    vol_ratio = stock_data_dict.get("vol_ratio")
+    pe = stock_data_dict.get("pe")
+    eps = stock_data_dict.get("eps")
+    eps_growth = stock_data_dict.get("eps_growth")
+    mcap = stock_data_dict.get("mcap")
+    beta = stock_data_dict.get("beta")
+    dividend_yield = stock_data_dict.get("dividend_yield")
+    
+    # Local indicators
+    indicators = all_indicators.get(ticker, {}) if isinstance(all_indicators, dict) else {}
+    local_ind = indicators.get("local_indicators", {}) if isinstance(indicators, dict) else indicators
+    
+    # TV MCP data
+    tv_data = {}
+    if isinstance(tv_mcp_data, dict):
+        tv_data = tv_mcp_data.get(ticker, {})
+    
+    # Build indicator summary string for LLM prompt
+    ind_lines = []
+    if local_ind:
+        for name, val in local_ind.items():
+            ind_lines.append(f"  {name}: {val}")
+    
+    # Build TV data summary
+    tv_lines = []
+    if tv_data:
+        if "pine_lines" in tv_data:
+            tv_lines.append(f"  Pine Lines: {json.dumps(tv_data['pine_lines'])[:500]}")
+        if "tv_indicators" in tv_data:
+            tv_lines.append(f"  TV Indicators: {json.dumps(tv_data['tv_indicators'])[:1000]}")
+        if "screenshot_path" in tv_data:
+            tv_lines.append(f"  Screenshot: {tv_data['screenshot_path']}")
+    
+    # Web research
+    web_research = perform_web_research(ticker)
+    
+    # Fetch latest yfinance data for fresh numbers
+    fresh_data = {}
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="2mo")
+        if not hist.empty:
+            fresh_data["current_price"] = round(float(hist["Close"].iloc[-1]), 2)
+            fresh_data["20d_avg_vol"] = int(hist["Volume"].iloc[-20:].mean()) if len(hist) >= 20 else 0
+            fresh_data["latest_rsi"] = None
+            if len(hist) >= 14:
+                close_arr = hist["Close"]
+                diff = close_arr.diff()
+                g = diff.where(diff > 0, 0.0)
+                l = -diff.where(diff < 0, 0.0)
+                ag = g.rolling(14).mean().iloc[-1]
+                al = l.rolling(14).mean().iloc[-1]
+                if al and al != 0:
+                    fresh_data["latest_rsi"] = round(100 - 100 / (1 + ag / al), 2)
+                else:
+                    fresh_data["latest_rsi"] = 100.0
+    except Exception:
+        pass
+    
+    # Build the system prompt from SOUL.md
+    system_prompt = f"""You are {persona.upper()}. This is your identity and voice — embody it completely.
+
+{soul[:10000]}
+
+CRITICAL RULES:
+1. Write in the EXACT VOICE of {persona.upper()} — use their jargon, sentence structure, references
+2. Include VERBATIM quotes from SOUL.md with source URLs
+3. Analyze ALL available indicators (21+ technical, fundamental, macro)
+4. 100+ words per indicator analysis
+5. Must be 3000+ words total
+6. Write as if you are {persona.upper()} personally analyzing this stock for your newsletter/blog"""
+
+    user_message = f"""
+## STOCK ANALYSIS REQUEST: {ticker}
+
+**Date:** {date_str}
+**Sector:** {sector}
+**Price:** ${price}
+**Change %:** {change_pct}%
+**Market Cap:** {("$" + "{:,}".format(mcap)) if mcap else "N/A"}  ({("$" + "{:.2f}B".format(mcap/1e9)) if mcap else "N/A"})
+
+### Fundamentals
+- P/E: {pe if pe else "N/A"}
+- EPS: {eps if eps else "N/A"}
+- EPS Growth (Quarterly): {eps_growth if eps_growth else "N/A"}
+- Beta: {beta if beta else "N/A"}
+- Dividend Yield: {dividend_yield if dividend_yield else "N/A"}
+
+### Technical Indicators
+{chr(10).join(ind_lines[:30]) if ind_lines else "  (Indicators computed via yfinance)"}
+
+### TV MCP Data
+{chr(10).join(tv_lines) if tv_lines else "  (TV Desktop CDP data not available)"}
+
+### Fresh yfinance Data
+{json.dumps(fresh_data, indent=2) if fresh_data else "  (Not available)"}
+
+### Web Research
+{web_research if web_research else "  (No recent news found)"}
+
+### Stock Context
+- 50-day MA: ${ma50 if ma50 else "N/A"}
+- 200-day MA: ${ma200 if ma200 else "N/A"}
+- Volume Ratio (vs 50d avg): {vol_ratio if vol_ratio else "N/A"}x
+- RSI(14): {rsi if rsi else "N/A"}
+
+BEGIN YOUR FULL ANALYSIS BELOW. Must be 3000+ words. Each section must be substantive with specific numbers, not generic commentary. Write in first person as {persona.upper()}.
+"""
+    
+    # Call DeepSeek
+    analysis = call_deepseek(system_prompt, user_message, deepseek_key, deepseek_url)
+    if not analysis:
+        analysis = f"# {ticker} — {date_str}\\n\\n*Analysis generation failed.*"
+    
+    # Ensure file content has header
+    header = f"# {ticker} — {persona.upper()} Analysis — {date_str}\\n\\n"
+    full_content = header + analysis
+    
+    # Add web research appendix
+    if web_research:
+        full_content += f"\\n\\n---\\n## Web Research — Recent News\\n\\n{web_research}"
+    
+    full_content += f"\\n\\n---\\n*Generated {date_str} by {persona.upper()} Arena Worker*"
+    
+    # Save file
+    persona_dir = os.path.join(comp_dir, persona)
+    os.makedirs(persona_dir, exist_ok=True)
+    filename = f"{ticker} - {date_str}.md"
+    filepath = os.path.join(persona_dir, filename)
+    
+    with open(filepath, "w") as f:
+        f.write(full_content)
+    
+    # FIX 2: Review Gate (Phase 3.5) - Lightweight verification
+    analysis_lower = analysis.lower()
+    content_prefix = analysis_lower[:2000]
+    negative_phrases = [
+        "this fails everything", "don't buy", "avoid this stock",
+        "this stock is garbage", "not a buy", "stay away", "terrible stock",
+        "completely avoid", "no redeeming qualities", "fail on all criteria",
+        "this is a loser", "skip this one", "not worth your time", "garbage"
+    ]
+    negative_count = sum(1 for phrase in negative_phrases if phrase in content_prefix)
+    last_500 = analysis_lower[-500:]
+    final_negative_phrases = [
+        "fail", "avoid", "not a buy", "pass", "skip",
+        "don't recommend", "no opportunity", "no setup"
+    ]
+    final_negative_count = sum(1 for phrase in final_negative_phrases if phrase in last_500)
+    buy_watch_words = ["buy", "watch", "opportunity", "setup", "entry", "target", "potential", "strong"]
+    has_actionable = any(w in content_prefix for w in buy_watch_words)
+    is_negative = (
+        negative_count >= 3 or
+        (negative_count >= 2 and final_negative_count >= 2) or
+        (final_negative_count >= 3) or
+        (negative_count >= 2 and not has_actionable)
+    )
+    if is_negative:
+        os.remove(filepath)
+        print(f"[Worker:{persona}]  REJECTED: {ticker} - analysis was entirely negative", flush=True)
+        return {"ticker": ticker, "word_count": 0, "file_path": None, "rejected": True}
+    
+    word_count = len(full_content.split())
+    file_size = os.path.getsize(filepath)
+    print(f"[Worker:{persona}]  ✓ {ticker} — {word_count} words, {file_size//1024}KB", flush=True)
+    
+    return {"ticker": ticker, "word_count": word_count, "file_path": filepath}
+
+
+if __name__ == "__main__":
+    try:
+        raw = sys.stdin.read()
+        params = json.loads(raw)
+    except Exception as e:
+        print(json.dumps({"error": f"Failed to parse input: {e}"}))
+        sys.exit(1)
+    
+    persona = params["persona"]
+    stocks = params["stocks"]
+    soul = params["soul"]
+    date_str = params["date_str"]
+    comp_dir = params["comp_dir"]
+    indicators = params.get("indicators", {})
+    tv_mcp = params.get("tv_mcp", {})
+    deepseek_key = params.get("deepseek_key", "")
+    deepseek_url = params.get("deepseek_url", "https://api.deepseek.com/v1")
+    
+    results = []
+    ticker_keys = sorted(stocks.keys())
+    
+    for i, ticker in enumerate(ticker_keys, 1):
+        stock_data = stocks[ticker]
+        print(f"[Worker:{persona}]  [{i}/{len(ticker_keys)}] Analyzing {ticker}...", flush=True)
+        result = write_stock_analysis(persona, stock_data, soul, date_str, comp_dir, indicators, tv_mcp, deepseek_key, deepseek_url)
+        if result:
+            results.append(result)
+    
+    # Return results as JSON to stdout
+    print(f"\\n---WORKER_RESULT---", flush=True)
+    print(json.dumps({"persona": persona, "results": results}), flush=True)
+'''
+    
+    with open(PERSONA_WORKER_SCRIPT, "w") as f:
+        f.write(script)
+    os.chmod(PERSONA_WORKER_SCRIPT, 0o755)
+    print(f"[Arena]  Worker script written: {PERSONA_WORKER_SCRIPT}", flush=True)
 
 # ─── ACCURACY TRACKER ─────────────────────────────────────────────────────────
 
 def run_accuracy_tracker():
-    """
-    Call accuracy_tracker functionality within try/except.
-    Scores picks from the previous week using current prices.
-    """
+    """Score last week's picks using current prices."""
     try:
         ACCURACY_DB = os.path.expanduser("~/.hermes_trading.db")
-
         if not os.path.isfile(ACCURACY_DB):
             print(f"[Arena]  Accuracy DB not found at {ACCURACY_DB}, skipping scoring", flush=True)
             return
-
         import sqlite3
-
         week_ago = (TODAY - datetime.timedelta(days=7)).isoformat()
         two_weeks_ago = (TODAY - datetime.timedelta(days=14)).isoformat()
-
         conn = sqlite3.connect(ACCURACY_DB)
         rows = conn.execute(
             "SELECT id, ticker, entry_price FROM accuracy_picks "
             "WHERE date >= ? AND date <= ? AND score_7d IS NULL",
             (two_weeks_ago, week_ago)
         ).fetchall()
-
         scored = 0
         for pick_id, ticker, entry_price in rows:
             try:
@@ -1263,75 +1810,204 @@ def run_accuracy_tracker():
                         scored += 1
             except Exception:
                 pass
-
         conn.close()
         print(f"[Arena]  ✓ Accuracy scored {scored}/{len(rows)} picks from last week", flush=True)
     except Exception as e:
         print(f"[Arena]  ⚠️  Accuracy tracking failed (non-fatal): {e}", flush=True)
 
 
+# ─── PHASE 3 ORCHESTRATOR ────────────────────────────────────────────────────
+
+def run_persona_subprocess(persona, stocks, soul, indicators_all, tv_mcp_all, deepseek_key, deepseek_url):
+    """
+    Spawn a subprocess for one persona's stock analysis.
+    Returns parsed JSON result or error dict.
+    """
+    params = {
+        "persona": persona,
+        "stocks": stocks,
+        "soul": soul if soul else "",
+        "date_str": DATE_STR,
+        "comp_dir": COMP_DIR,
+        "indicators": indicators_all,
+        "tv_mcp": tv_mcp_all,
+        "deepseek_key": deepseek_key or "",
+        "deepseek_url": deepseek_url,
+    }
+    
+    # Use hermes_env Python
+    python_bin = os.path.expanduser("~/hermes_env/bin/python3")
+    if not os.path.isfile(python_bin):
+        python_bin = sys.executable
+    
+    try:
+        proc = subprocess.Popen(
+            [python_bin, PERSONA_WORKER_SCRIPT],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout, stderr = proc.communicate(input=json.dumps(params), timeout=600)
+        
+        if proc.returncode != 0:
+            print(f"[Arena]  ❌ Worker for {persona} failed (exit={proc.returncode})", flush=True)
+            if stderr:
+                for line in stderr.split("\n")[-5:]:
+                    if line.strip():
+                        print(f"[{persona} ERR] {line.strip()}", flush=True)
+            return {"persona": persona, "results": [], "error": f"exit {proc.returncode}"}
+        
+        # Parse result from stdout (after ---WORKER_RESULT--- marker)
+        if "---WORKER_RESULT---" in stdout:
+            result_json = stdout.split("---WORKER_RESULT---")[1].strip()
+        else:
+            result_json = stdout.strip().split("\n")[-1] if stdout.strip() else "{}"
+        
+        try:
+            result = json.loads(result_json)
+            return result
+        except json.JSONDecodeError:
+            print(f"[Arena]  ❌ Worker for {persona} returned invalid JSON", flush=True)
+            return {"persona": persona, "results": [], "error": "invalid JSON"}
+            
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        print(f"[Arena]  ❌ Worker for {persona} timed out (10 min)", flush=True)
+        return {"persona": persona, "results": [], "error": "timeout"}
+    except Exception as e:
+        print(f"[Arena]  ❌ Worker for {persona} error: {e}", flush=True)
+        return {"persona": persona, "results": [], "error": str(e)}
+
+
+def run_all_personas(persona_stocks, indicators_all, tv_mcp_all):
+    """
+    Phase 3: Spawn persona subprocesses in batches of 3.
+    Each subprocess writes individual stock analysis files.
+    Returns aggregated results.
+    """
+    # Generate worker script if not exists
+    if not os.path.isfile(PERSONA_WORKER_SCRIPT):
+        generate_persona_worker_script()
+    
+    all_results = {}
+    total_stocks_analyzed = 0
+    total_words = 0
+    
+    persona_list = list(PERSONAS)
+    n_personas = len(persona_list)
+    
+    for batch_start in range(0, n_personas, 3):
+        batch = persona_list[batch_start:batch_start + 3]
+        batch_num = (batch_start // 3) + 1
+        n_batches = (n_personas + 2) // 3
+        print(f"[Arena]  Phase 3 Batch {batch_num}/{n_batches}: {', '.join(batch)}", flush=True)
+        
+        futures = {}
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            for persona in batch:
+                soul = load_persona_soul(persona)
+                if not soul:
+                    print(f"[Arena]  ⚠️  Skipping {persona} — no SOUL.md", flush=True)
+                    all_results[persona] = {"persona": persona, "results": [], "error": "no SOUL.md"}
+                    continue
+                
+                fut = pool.submit(
+                    run_persona_subprocess,
+                    persona, persona_stocks[persona], soul,
+                    indicators_all, tv_mcp_all,
+                    DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+                )
+                futures[fut] = persona
+            
+            for fut in as_completed(futures):
+                persona = futures[fut]
+                try:
+                    result = fut.result()
+                    all_results[persona] = result
+                    r = result.get("results", [])
+                    persona_words = sum(ri.get("word_count", 0) for ri in r)
+                    total_stocks_analyzed += len(r)
+                    total_words += persona_words
+                    print(f"[Arena]  ✓ {persona}: {len(r)} stocks analyzed, {persona_words} total words", flush=True)
+                except Exception as e:
+                    print(f"[Arena]  ❌ {persona} batch error: {e}", flush=True)
+                    all_results[persona] = {"persona": persona, "results": [], "error": str(e)}
+    
+    print(f"[Arena]  Phase 3 complete: {total_stocks_analyzed} total stocks, {total_words} total words", flush=True)
+    return all_results
+
+
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
+
+def scan_global_markets():
+    """
+    Phase 1: TV scanner + yfinance → global data.
+    Returns (market_by_region, flat_results).
+    """
+    print(f"[Arena]  Phase 1: Scanning global markets...", flush=True)
+    market_by_region, flat_results, from_cache = load_or_scan_market_data()
+    
+    if flat_results:
+        flat_results = {t: d for t, d in flat_results.items() if d and "error" not in d}
+    
+    # Also compute TV MCP indicators for enriched data
+    top_tickers = sorted(
+        [v for v in flat_results.values() if v and "error" not in v],
+        key=lambda x: (x.get("vol_ratio", 0) or 0) * (abs(x.get("change_pct", 0)) or 0),
+        reverse=True,
+    )[:50]
+    top_ticker_symbols = [s["ticker"] for s in top_tickers if "ticker" in s]
+    
+    tv_mcp_data = {}
+    if top_ticker_symbols:
+        print(f"[Arena]  Phase 1b: Reading TV MCP indicators for top tickers...", flush=True)
+        tv_mcp_data = read_tv_mcp_indicators(top_ticker_symbols)
+        if tv_mcp_data:
+            for ticker, mcp_vals in tv_mcp_data.items():
+                if ticker in flat_results and flat_results[ticker]:
+                    flat_results[ticker]["tv_mcp_indicators"] = mcp_vals
+            print(f"[Arena]  TV MCP enhanced {len(tv_mcp_data)} tickers", flush=True)
+    
+    total_tickers = len(flat_results)
+    print(f"[Arena]  Phase 1 complete: {total_tickers} tickers across {len(market_by_region)} regions", flush=True)
+    
+    return market_by_region, flat_results, tv_mcp_data
+
 
 def main():
     start_time = time.monotonic()
 
     print(f"[Arena]  === ARENA RUNNER — {DATE_STR} ===", flush=True)
+    print(f"[Arena]  Architecture: Phase 1/2/3 — Individual stock files per persona", flush=True)
 
     # Resolve API key
     _resolve_api_key()
     if not DEEPSEEK_API_KEY:
-        print("[Arena]  ⚠️  No DeepSeek API key configured. Analyses will use local processing only.", flush=True)
+        print("[Arena]  ⚠️  No DeepSeek API key configured. Analyses will use yfinance data only.", flush=True)
 
-    # ─── STEP 1: Fundamentals FIRST (yfinance for ALL tickers) ──────────
-    print(f"[Arena]  Step 1/3: Fetching fundamentals via yfinance...", flush=True)
-    market_by_region, flat_results, from_cache = load_or_scan_market_data()
-    # FIX 5: Deduplicate flat_results tickers
-    if flat_results:
-        flat_results = {t: d for t, d in flat_results.items() if d and "error" not in d}
-        print(f"[Arena]  Valid tickers after dedup: {len(flat_results)}", flush=True)
+    # ─── PHASE 1: TV Scanner + yfinance + TV MCP ──────────────────────
+    market_by_region, flat_results, tv_mcp_data = scan_global_markets()
 
-    # Build market_json for LLM context
-    market_json = {
-        "date": DATE_STR,
-        "by_region": market_by_region,
-        "summary": {},
-    }
-    for region, stocks in market_by_region.items():
-        changes = [s.get("change_pct", 0) for s in stocks if s and s.get("change_pct") is not None]
-        rsis = [s.get("rsi") for s in stocks if s and s.get("rsi") is not None]
-        market_json["summary"][region] = {
-            "count": len(stocks),
-            "avg_change": round(sum(changes) / len(changes), 2) if changes else 0,
-            "avg_rsi": round(sum(rsis) / len(rsis), 1) if rsis else 0,
-        }
+    # ─── PHASE 2: Assign stocks to personas ───────────────────────────
+    print(f"[Arena]  Phase 2: Assigning stocks to {len(PERSONAS)} personas...", flush=True)
+    persona_stocks = assign_stocks_to_personas(flat_results)
+    
+    # Compute indicators for all assigned stocks
+    all_assigned_tickers = set()
+    for p in persona_stocks:
+        all_assigned_tickers.update(persona_stocks[p].keys())
+    print(f"[Arena]  Total unique tickers across all personas: {len(all_assigned_tickers)}", flush=True)
+    
+    # Compute full indicators for assigned tickers
+    print(f"[Arena]  Computing full 21 indicators for {len(all_assigned_tickers)} assigned tickers...", flush=True)
+    indicators_all = compute_indicators_batch(list(all_assigned_tickers))
+    if indicators_all:
+        print(f"[Arena]  Indicators computed for {len(indicators_all)} tickers", flush=True)
 
-    total_tickers = sum(len(v) for v in market_by_region.values())
-    print(f"[Arena]  Fundamentals collected: {total_tickers} tickers across {len(market_by_region)} regions", flush=True)
-
-    # ─── STEP 2: TV MCP for technicals (if fundamentals succeeded) ─────
-    print(f"[Arena]  Step 2/3: Connecting to TV MCP for enhanced technicals...", flush=True)
-    sorted_by_activity = sorted(
-        [v for v in flat_results.values() if v and "error" not in v],
-        key=lambda x: (x.get("vol_ratio", 0) or 0) * (abs(x.get("change_pct", 0)) or 0),
-        reverse=True,
-    )
-    top_tickers = [s["ticker"] for s in sorted_by_activity[:50] if "ticker" in s]
-    if top_tickers:
-        mcp_data = read_tv_mcp_indicators(top_tickers)
-        if mcp_data:
-            for ticker, mcp_vals in mcp_data.items():
-                if ticker in flat_results and flat_results[ticker]:
-                    flat_results[ticker]["tv_mcp_indicators"] = mcp_vals
-            print(f"[Arena]  TV MCP enhanced {len(mcp_data)} tickers with technical indicators", flush=True)
-        else:
-            print(f"[Arena]  TV MCP returned no data (fundamentals already collected, continuing)", flush=True)
-    else:
-        print(f"[Arena]  No active tickers to enhance via TV MCP", flush=True)
-
-    # ─── STEP 3: Generate analysis ─────────────────────────────────────
-    print(f"[Arena]  Step 3/3: Running {len(PERSONAS)} persona analyses...", flush=True)
-    success, fail = run_all_personas(market_json, flat_results)
-    print(f"[Arena]  Persona analyses: {success} ok, {fail} failed", flush=True)
+    # ─── PHASE 3: Spawn persona analyses in batches of 3 ─────────────
+    print(f"[Arena]  Phase 3: Running persona analyses in batches (max 3 concurrent)...", flush=True)
+    all_results = run_all_personas(persona_stocks, indicators_all, tv_mcp_data)
 
     # Accuracy tracker
     run_accuracy_tracker()
@@ -1340,9 +2016,22 @@ def main():
     elapsed = time.monotonic() - start_time
     print(f"\n[Arena]  ✅ Arena complete in {elapsed:.0f}s — {DATE_STR}", flush=True)
 
+    total_files = 0
+    total_words = 0
+    for persona, result in all_results.items():
+        r = result.get("results", [])
+        total_files += len(r)
+        total_words += sum(ri.get("word_count", 0) for ri in r)
+    print(f"[Arena]  Total: {total_files} stock files, {total_words} words", flush=True)
+
     if os.path.isdir(COMP_DIR):
-        out_files = [f for f in os.listdir(COMP_DIR) if DATE_STR in f]
-        print(f"[Arena]  Output: {len(out_files)} files in {COMP_DIR}", flush=True)
+        persona_dirs = [d for d in os.listdir(COMP_DIR) if os.path.isdir(os.path.join(COMP_DIR, d))]
+        print(f"[Arena]  Output dirs: {len(persona_dirs)} persona folders in {COMP_DIR}", flush=True)
+        for d in sorted(persona_dirs):
+            pdir = os.path.join(COMP_DIR, d)
+            files = [f for f in os.listdir(pdir) if DATE_STR in f]
+            if files:
+                print(f"[Arena]    {d}/: {len(files)} files", flush=True)
 
 
 if __name__ == "__main__":
