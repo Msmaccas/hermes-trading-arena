@@ -20,10 +20,12 @@ Args via stdin JSON:
 import sys, json, os, datetime, time, warnings
 import numpy as np
 import yfinance as yf
+import functools
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 warnings.filterwarnings("ignore")
 
-def call_deepseek(system_prompt, user_message, api_key, base_url, timeout=180, max_tokens=8192):
+def call_deepseek(system_prompt, user_message, api_key, base_url, timeout=300, max_tokens=8192):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -45,6 +47,7 @@ def call_deepseek(system_prompt, user_message, api_key, base_url, timeout=180, m
         return None
 
 
+@functools.lru_cache(maxsize=50)
 def perform_web_research(ticker):
     try:
         stock = yf.Ticker(ticker)
@@ -138,28 +141,16 @@ def write_stock_analysis(persona, stock_data_dict, soul, date_str, comp_dir, all
     # Web research
     web_research = perform_web_research(ticker)
     
-    # Fetch latest yfinance data for fresh numbers
+    # FIX 6 — Use pre-computed Phase 1 data instead of fresh yfinance calls
     fresh_data = {}
-    try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="2mo")
-        if not hist.empty:
-            fresh_data["current_price"] = round(float(hist["Close"].iloc[-1]), 2)
-            fresh_data["20d_avg_vol"] = int(hist["Volume"].iloc[-20:].mean()) if len(hist) >= 20 else 0
-            fresh_data["latest_rsi"] = None
-            if len(hist) >= 14:
-                close_arr = hist["Close"]
-                diff = close_arr.diff()
-                g = diff.where(diff > 0, 0.0)
-                l = -diff.where(diff < 0, 0.0)
-                ag = g.rolling(14).mean().iloc[-1]
-                al = l.rolling(14).mean().iloc[-1]
-                if al and al != 0:
-                    fresh_data["latest_rsi"] = round(100 - 100 / (1 + ag / al), 2)
-                else:
-                    fresh_data["latest_rsi"] = 100.0
-    except Exception:
-        pass
+    if stock_data_dict.get("price"):
+        fresh_data["current_price"] = float(stock_data_dict["price"])
+    if stock_data_dict.get("rsi") is not None:
+        fresh_data["latest_rsi"] = stock_data_dict["rsi"]
+    if isinstance(local_ind, dict) and local_ind.get("Volume"):
+        fresh_data["last_volume"] = local_ind["Volume"]
+    if isinstance(local_ind, dict) and local_ind.get("Volume_ratio"):
+        fresh_data["vol_ratio"] = local_ind["Volume_ratio"]
     
     # Build the system prompt from SOUL.md
     system_prompt = f"""You are {persona.upper()}. This is your identity and voice — embody it completely.
@@ -235,6 +226,38 @@ BEGIN YOUR FULL ANALYSIS BELOW. Must be 3000+ words. Each section must be substa
     with open(filepath, "w") as f:
         f.write(full_content)
     
+    # FIX 2: Review Gate (Phase 3.5) - Lightweight verification
+    analysis_lower = analysis.lower()
+    content_prefix = analysis_lower[:2000]
+    # FIX 3 — Only genuinely negative phrases; removed "pass" and "fail" (false positives)
+    negative_phrases = [
+        "don't buy", "avoid this stock",
+        "this stock is garbage", "not a buy", "stay away", "terrible stock",
+        "completely avoid", "no redeeming qualities",
+        "this is a loser", "skip this one", "not worth your time", "garbage",
+        "no confidence",
+    ]
+    negative_count = sum(1 for phrase in negative_phrases if phrase in content_prefix)
+    last_500 = analysis_lower[-500:]
+    # FIX 3 — Removed "pass" and "fail" (too many false positives)
+    final_negative_phrases = [
+        "avoid", "not a buy", "skip",
+        "don't recommend", "no opportunity", "no setup",
+    ]
+    final_negative_count = sum(1 for phrase in final_negative_phrases if phrase in last_500)
+    buy_watch_words = ["buy", "watch", "opportunity", "setup", "entry", "target", "potential", "strong"]
+    has_actionable = any(w in content_prefix for w in buy_watch_words)
+    is_negative = (
+        negative_count >= 3 or
+        (negative_count >= 2 and final_negative_count >= 2) or
+        (final_negative_count >= 3) or
+        (negative_count >= 2 and not has_actionable)
+    )
+    if is_negative:
+        os.remove(filepath)
+        print(f"[Worker:{persona}]  REJECTED: {ticker} - analysis was entirely negative", flush=True)
+        return {"ticker": ticker, "word_count": 0, "file_path": None, "rejected": True}
+    
     word_count = len(full_content.split())
     file_size = os.path.getsize(filepath)
     print(f"[Worker:{persona}]  ✓ {ticker} — {word_count} words, {file_size//1024}KB", flush=True)
@@ -262,18 +285,45 @@ if __name__ == "__main__":
     
     results = []
     ticker_keys = sorted(stocks.keys())
-    
-    for i, ticker in enumerate(ticker_keys, 1):
-        stock_data = stocks[ticker]
-        # Defensive: skip stock if it lacks minimum data (shouldn't happen post-screening)
-        if not stock_data or not stock_data.get("price"):
-            print(f"[Worker:{persona}]  ⚠ Skipping {ticker} — no price data (failed screening)", flush=True)
-            continue
-        print(f"[Worker:{persona}]  [{i}/{len(ticker_keys)}] Analyzing {ticker}...", flush=True)
-        result = write_stock_analysis(persona, stock_data, soul, date_str, comp_dir, indicators, tv_mcp, deepseek_key, deepseek_url)
-        if result:
-            results.append(result)
-    
+
+    # ── Parallel stock analysis (3 concurrent DeepSeek calls) ──
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def analyze_one_stock(ticker_and_data):
+        ticker, data = ticker_and_data
+        print(f"[Worker:{persona}]  Analyzing {ticker}...", flush=True)
+        try:
+            return write_stock_analysis(
+                persona, data, soul, date_str, comp_dir,
+                indicators, tv_mcp, deepseek_key, deepseek_url
+            )
+        except Exception as e:
+            print(f"[Worker:{persona}]  ⚠️ {ticker} error: {e}", flush=True)
+            return {"ticker": ticker, "word_count": 0, "error": str(e)}
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        fut_map = {}
+        for t in ticker_keys:
+            fut = pool.submit(analyze_one_stock, (t, stocks[t]))
+            fut_map[fut] = t
+            time.sleep(0.5)  # stagger submissions to avoid hammering DeepSeek
+
+        completed = 0
+        failed = 0
+        for fut in as_completed(fut_map):
+            ticker = fut_map[fut]
+            try:
+                r = fut.result()
+                if r and r.get("ticker"):
+                    results.append(r)
+                    completed += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                failed += 1
+                print(f"[Worker:{persona}]  ❌ {ticker} crashed: {e}", flush=True)
+        print(f"[Worker:{persona}]  Done: {completed} OK / {failed} failed", flush=True)
+ 
     # Return results as JSON to stdout
     print(f"\\n---WORKER_RESULT---", flush=True)
     print(json.dumps({"persona": persona, "results": results}), flush=True)

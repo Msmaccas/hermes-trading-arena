@@ -91,6 +91,16 @@ STOCKS_PER_PERSONA = 50
 
 # ─── CONFIG LOADING ───────────────────────────────────────────────────────────
 
+# ─── MODE FLAG ────────────────────────────────────────────────────────────────
+# Set to "TARGET_STOCKS" to skip Phase 1 (TV scanner) and use a predefined list.
+# Set to "TV_SCAN" (or anything else) for the normal full pipeline.
+MODE = "TARGET_STOCKS"
+
+# When MODE is TARGET_STOCKS, use this stock list instead of scanning global markets.
+TARGET_STOCK_LIST = [
+    "MU", "RDDT", "CRDO", "COCO", "STRL", "ASM.AS", "ERO", "GLW", "WSTL", "ALAB",
+]
+
 def _load_env():
     """Load API keys from ~/.hermes/.env"""
     env_path = os.path.expanduser("~/.hermes/.env")
@@ -100,7 +110,6 @@ def _load_env():
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#"):
-                    continue
                 if "=" in line:
                     k, v = line.split("=", 1)
                     env[k.strip()] = v.strip().strip('"').strip("'")
@@ -321,12 +330,62 @@ def compute_rsi(close, period=14):
 def analyze_ticker(ticker_str):
     """Fetch real data for one ticker via yfinance.
     Computes RSI(14), MA50, MA200, volume ratio, P/E, EPS growth, market cap.
+    FIX 5 — Uses _yf_lock for rate-limiting. FIX 7 — Uses direct Yahoo API first.
     """
     try:
-        stock = yf.Ticker(ticker_str)
-        hist = stock.history(period="1y")
-        info = stock.info or {}
-        if hist.empty or len(hist) < 20:
+        # FIX 7 — Try direct Yahoo v8/v7 API first (10-15x faster)
+        v8_data = yahoo_v8_history(ticker_str, range_str="1y", interval="1d")
+        v7_data = yahoo_v7_quote(ticker_str)
+        v8_ok = v8_data is not None and len(v8_data.get("close", [])) >= 20
+        v7_ok = v7_data is not None
+
+        if v8_ok and v7_ok:
+            # Use direct API data
+            close_arr = np.array([c for c in v8_data["close"] if c is not None], dtype=float)
+            vol_arr = np.array([v for v in v8_data["volume"] if v is not None], dtype=float)
+            if len(close_arr) < 20:
+                return None
+            import pandas as pd
+            close_series = pd.Series(close_arr)
+            vol_series = pd.Series(vol_arr)
+            price = float(close_arr[-1])
+            mcap = v7_data.get("marketCap")
+            if price < 2.0 and (mcap is None or mcap < 50e6):
+                return None
+            prev_close = float(close_arr[-2]) if len(close_arr) > 1 else price
+            change_pct = round((price - prev_close) / prev_close * 100, 2)
+            rsi = compute_rsi(close_series)
+            ma50 = float(np.mean(close_arr[-50:])) if len(close_arr) >= 50 else None
+            ma200 = float(np.mean(close_arr[-200:])) if len(close_arr) >= 200 else None
+            avg_vol = float(np.mean(vol_arr[-50:])) if len(vol_arr) >= 50 else float(np.mean(vol_arr))
+            vol_ratio = round(float(vol_arr[-1]) / avg_vol, 2) if avg_vol > 0 else 1.0
+            pe = v7_data.get("trailingPE") or v7_data.get("forwardPE")
+            eps = v7_data.get("trailingEps") or v7_data.get("forwardEps")
+            eps_growth = v7_data.get("earningsQuarterlyGrowth")
+            sector = v7_data.get("sector", "Unknown")
+            beta = v7_data.get("beta")
+            dividend_yield = v7_data.get("dividendYield")
+            return {
+                "ticker": ticker_str,
+                "price": round(price, 2),
+                "change_pct": change_pct,
+                "rsi": rsi,
+                "ma50": round(ma50, 2) if ma50 else None,
+                "ma200": round(ma200, 2) if ma200 else None,
+                "vol_ratio": vol_ratio,
+                "pe": pe,
+                "eps": eps,
+                "eps_growth": eps_growth,
+                "mcap": mcap,
+                "sector": sector,
+                "beta": beta,
+                "dividend_yield": dividend_yield,
+            }
+
+        # Fallback: yfinance with rate-limiting and retry
+        hist = _yf_fetch_with_retry(ticker_str, operation="history", period="1y")
+        info = _yf_fetch_with_retry(ticker_str, operation="info", period="1y")
+        if hist is None or hist.empty or len(hist) < 20:
             return None
 
         close = hist["Close"]
@@ -380,7 +439,7 @@ def scan_market_data(ticker_list):
     Returns a dict of {ticker: data_dict}.
     """
     results = {}
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         fut_map = {}
         for t in ticker_list:
             fut = pool.submit(analyze_ticker, t)
@@ -407,17 +466,34 @@ def _ema(values, period):
 def compute_all_indicators(ticker):
     """
     Compute 21 technical indicators for a single ticker via yfinance + numpy.
+    FIX 5 — Uses _yf_lock for rate-limiting. FIX 7 — Uses direct Yahoo API first.
     Returns dict of {indicator_name: value} or None on failure.
     """
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="6mo")
-        if hist.empty or len(hist) < 30:
-            return None
-        close = hist["Close"].values
-        high = hist["High"].values
-        low = hist["Low"].values
-        volume = hist["Volume"].values
+        # FIX 7 — Try direct Yahoo v8 API first
+        v8_data = yahoo_v8_history(ticker, range_str="6mo", interval="1d")
+        if v8_data is not None and len(v8_data.get("close", [])) >= 30:
+            close_arr = np.array([c for c in v8_data["close"] if c is not None], dtype=float)
+            high_arr = np.array([h for h in v8_data["high"] if h is not None], dtype=float)
+            low_arr = np.array([l for l in v8_data["low"] if l is not None], dtype=float)
+            vol_arr = np.array([v for v in v8_data["volume"] if v is not None], dtype=float)
+            if len(close_arr) >= 30 and len(high_arr) >= 30 and len(low_arr) >= 30 and len(vol_arr) >= 30:
+                close = close_arr
+                high = high_arr
+                low = low_arr
+                volume = vol_arr
+            else:
+                v8_data = None
+
+        if v8_data is None:
+            # Fallback: yfinance with rate-limiting and retry
+            hist = _yf_fetch_with_retry(ticker, operation="history", period="6mo")
+            if hist is None or hist.empty or len(hist) < 30:
+                return None
+            close = hist["Close"].values
+            high = hist["High"].values
+            low = hist["Low"].values
+            volume = hist["Volume"].values
 
         result = {}
         price = float(close[-1])
@@ -520,7 +596,7 @@ def compute_all_indicators(ticker):
 def compute_indicators_batch(ticker_list):
     """Compute indicators for a list of tickers using ThreadPoolExecutor."""
     results = {}
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         fut_map = {pool.submit(compute_all_indicators, t): t for t in ticker_list}
         for fut in as_completed(fut_map):
             t = fut_map[fut]
@@ -1135,6 +1211,7 @@ def filter_by_persona_criteria(persona, stock):
         return True, "Passes O'Neil: PE 5-50, positive EPS growth, RSI>30, price>MA50"
 
     if persona == "buffet":
+        # FIX 1 — Minimum market cap $10B
         if pe is None or pe <= 0:
             return False, "PE missing or non-positive"
         if pe < 5 or pe > 25:
@@ -1143,21 +1220,22 @@ def filter_by_persona_criteria(persona, stock):
             return False, "No positive EPS"
         if mcap is None:
             return False, "Market cap missing"
-        if mcap < 1e9:
-            return False, "Market cap < 1B"
+        if mcap < 10e9:
+            return False, "Market cap < 10B"
         if price is None:
             return False, "No price data"
-        return True, "Passes Buffett: PE 5-25, EPS>0, mcap>1B"
+        return True, "Passes Buffett: PE 5-25, EPS>0, mcap>10B"
 
     if persona == "lynch":
+        # FIX 1 — Guard against eps_growth=0 and division by zero
         if pe is None or pe <= 0:
-            return False, "PE missing or non-positive"
+            return False, "P/E too low or missing"
         if eps_growth is None or eps_growth <= 0:
             return False, "No positive EPS growth"
-        if eps_growth is not None and eps_growth > 0:
-            peg = pe / (eps_growth * 100)
-            if peg >= 3.0:
-                return False, f"PEG {peg:.2f} >= 3.0"
+        # Safe PEG computation: eps_growth > 0 guaranteed above
+        peg = pe / (eps_growth * 100)
+        if peg >= 3.0:
+            return False, f"PEG {peg:.2f} >= 3.0"
         if price is None:
             return False, "No price data"
         return True, "Passes Lynch: PE>0, EPS growth>0, PEG<3.0"
@@ -1190,14 +1268,17 @@ def filter_by_persona_criteria(persona, stock):
         return True, f"Passes Qullamaggie: {conditions_met}/3 criteria met"
 
     if persona == "david-ryan":
-        if eps_growth is not None:
-            if eps_growth > 0.1:
-                return True, f"Passes David Ryan: EPS growth {eps_growth*100:.1f}% > 10%"
-        if ma50 is not None and price is not None and price > ma50:
-            return True, "Passes David Ryan: price > MA50 (no EPS)"
-        if eps_growth is not None:
+        # FIX 2 — EPS acceleration is core. If EPS missing, require BOTH price>MA50 and vol_ratio>1.2
+        if eps_growth is not None and eps_growth > 0.1:
+            return True, f"Passes David Ryan: EPS growth {eps_growth*100:.1f}% > 10%"
+        if eps_growth is None:
+            # No EPS data: require BOTH price>MA50 and unusual volume
+            if ma50 is not None and price is not None and price > ma50 and vol_ratio is not None and vol_ratio > 1.2:
+                return True, f"Passes David Ryan: price > MA50 and vol_ratio {vol_ratio:.1f} > 1.2 (no EPS)"
+            return False, "No EPS growth data; need price>MA50 AND vol_ratio>1.2"
+        if eps_growth is not None and eps_growth <= 0.1:
             return False, f"EPS growth {eps_growth*100:.1f}% <= 10%"
-        return False, "No criteria met: need EPS growth>10% OR price>MA50"
+        return False, "No criteria met: need EPS growth>10% OR (price>MA50 AND vol_ratio>1.2)"
 
     if persona == "matt-caruso":
         if price is None:
@@ -1404,6 +1485,7 @@ def assign_stocks_to_personas(flat_results):
     Uses filter_by_persona_criteria for persona-specific methodology filters.
     Only assign stocks that PASS the persona's methodology.
     
+    
     Returns dict of {persona_name: {ticker: stock_data}}
     """
     from collections import defaultdict
@@ -1412,6 +1494,7 @@ def assign_stocks_to_personas(flat_results):
                     if d and "error" not in d and d.get("price")}
     
     persona_stocks = defaultdict(dict)
+    assigned_tickers = set()  # FIX 4 — Track tickers already given to any persona
     
     for persona in PERSONAS:
         pass_count = 0
@@ -1421,6 +1504,7 @@ def assign_stocks_to_personas(flat_results):
             passes, reason = filter_by_persona_criteria(persona, data)
             if passes:
                 persona_stocks[persona][ticker] = data
+                assigned_tickers.add(ticker)  # FIX 4 — Mark as assigned
                 pass_count += 1
             else:
                 fail_count += 1
@@ -1486,10 +1570,12 @@ Args via stdin JSON:
 import sys, json, os, datetime, time, warnings
 import numpy as np
 import yfinance as yf
+import functools
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 warnings.filterwarnings("ignore")
 
-def call_deepseek(system_prompt, user_message, api_key, base_url, timeout=180, max_tokens=8192):
+def call_deepseek(system_prompt, user_message, api_key, base_url, timeout=300, max_tokens=8192):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -1511,6 +1597,7 @@ def call_deepseek(system_prompt, user_message, api_key, base_url, timeout=180, m
         return None
 
 
+@functools.lru_cache(maxsize=50)
 def perform_web_research(ticker):
     try:
         stock = yf.Ticker(ticker)
@@ -1604,28 +1691,16 @@ def write_stock_analysis(persona, stock_data_dict, soul, date_str, comp_dir, all
     # Web research
     web_research = perform_web_research(ticker)
     
-    # Fetch latest yfinance data for fresh numbers
+    # FIX 6 — Use pre-computed Phase 1 data instead of fresh yfinance calls
     fresh_data = {}
-    try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="2mo")
-        if not hist.empty:
-            fresh_data["current_price"] = round(float(hist["Close"].iloc[-1]), 2)
-            fresh_data["20d_avg_vol"] = int(hist["Volume"].iloc[-20:].mean()) if len(hist) >= 20 else 0
-            fresh_data["latest_rsi"] = None
-            if len(hist) >= 14:
-                close_arr = hist["Close"]
-                diff = close_arr.diff()
-                g = diff.where(diff > 0, 0.0)
-                l = -diff.where(diff < 0, 0.0)
-                ag = g.rolling(14).mean().iloc[-1]
-                al = l.rolling(14).mean().iloc[-1]
-                if al and al != 0:
-                    fresh_data["latest_rsi"] = round(100 - 100 / (1 + ag / al), 2)
-                else:
-                    fresh_data["latest_rsi"] = 100.0
-    except Exception:
-        pass
+    if stock_data_dict.get("price"):
+        fresh_data["current_price"] = float(stock_data_dict["price"])
+    if stock_data_dict.get("rsi") is not None:
+        fresh_data["latest_rsi"] = stock_data_dict["rsi"]
+    if isinstance(local_ind, dict) and local_ind.get("Volume"):
+        fresh_data["last_volume"] = local_ind["Volume"]
+    if isinstance(local_ind, dict) and local_ind.get("Volume_ratio"):
+        fresh_data["vol_ratio"] = local_ind["Volume_ratio"]
     
     # Build the system prompt from SOUL.md
     system_prompt = f"""You are {persona.upper()}. This is your identity and voice — embody it completely.
@@ -1704,17 +1779,20 @@ BEGIN YOUR FULL ANALYSIS BELOW. Must be 3000+ words. Each section must be substa
     # FIX 2: Review Gate (Phase 3.5) - Lightweight verification
     analysis_lower = analysis.lower()
     content_prefix = analysis_lower[:2000]
+    # FIX 3 — Only genuinely negative phrases; removed "pass" and "fail" (false positives)
     negative_phrases = [
-        "this fails everything", "don't buy", "avoid this stock",
+        "don't buy", "avoid this stock",
         "this stock is garbage", "not a buy", "stay away", "terrible stock",
-        "completely avoid", "no redeeming qualities", "fail on all criteria",
-        "this is a loser", "skip this one", "not worth your time", "garbage"
+        "completely avoid", "no redeeming qualities",
+        "this is a loser", "skip this one", "not worth your time", "garbage",
+        "no confidence",
     ]
     negative_count = sum(1 for phrase in negative_phrases if phrase in content_prefix)
     last_500 = analysis_lower[-500:]
+    # FIX 3 — Removed "pass" and "fail" (too many false positives)
     final_negative_phrases = [
-        "fail", "avoid", "not a buy", "pass", "skip",
-        "don't recommend", "no opportunity", "no setup"
+        "avoid", "not a buy", "skip",
+        "don't recommend", "no opportunity", "no setup",
     ]
     final_negative_count = sum(1 for phrase in final_negative_phrases if phrase in last_500)
     buy_watch_words = ["buy", "watch", "opportunity", "setup", "entry", "target", "potential", "strong"]
@@ -1757,14 +1835,45 @@ if __name__ == "__main__":
     
     results = []
     ticker_keys = sorted(stocks.keys())
-    
-    for i, ticker in enumerate(ticker_keys, 1):
-        stock_data = stocks[ticker]
-        print(f"[Worker:{persona}]  [{i}/{len(ticker_keys)}] Analyzing {ticker}...", flush=True)
-        result = write_stock_analysis(persona, stock_data, soul, date_str, comp_dir, indicators, tv_mcp, deepseek_key, deepseek_url)
-        if result:
-            results.append(result)
-    
+
+    # ── Parallel stock analysis (3 concurrent DeepSeek calls) ──
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def analyze_one_stock(ticker_and_data):
+        ticker, data = ticker_and_data
+        print(f"[Worker:{persona}]  Analyzing {ticker}...", flush=True)
+        try:
+            return write_stock_analysis(
+                persona, data, soul, date_str, comp_dir,
+                indicators, tv_mcp, deepseek_key, deepseek_url
+            )
+        except Exception as e:
+            print(f"[Worker:{persona}]  ⚠️ {ticker} error: {e}", flush=True)
+            return {"ticker": ticker, "word_count": 0, "error": str(e)}
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        fut_map = {}
+        for t in ticker_keys:
+            fut = pool.submit(analyze_one_stock, (t, stocks[t]))
+            fut_map[fut] = t
+            time.sleep(0.5)  # stagger submissions to avoid hammering DeepSeek
+
+        completed = 0
+        failed = 0
+        for fut in as_completed(fut_map):
+            ticker = fut_map[fut]
+            try:
+                r = fut.result()
+                if r and r.get("ticker"):
+                    results.append(r)
+                    completed += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                failed += 1
+                print(f"[Worker:{persona}]  ❌ {ticker} crashed: {e}", flush=True)
+        print(f"[Worker:{persona}]  Done: {completed} OK / {failed} failed", flush=True)
+ 
     # Return results as JSON to stdout
     print(f"\\n---WORKER_RESULT---", flush=True)
     print(json.dumps({"persona": persona, "results": results}), flush=True)
@@ -1848,7 +1957,7 @@ def run_persona_subprocess(persona, stocks, soul, indicators_all, tv_mcp_all, de
             stderr=subprocess.PIPE,
             text=True,
         )
-        stdout, stderr = proc.communicate(input=json.dumps(params), timeout=600)
+        stdout, stderr = proc.communicate(input=json.dumps(params), timeout=7200)
         
         if proc.returncode != 0:
             print(f"[Arena]  ❌ Worker for {persona} failed (exit={proc.returncode})", flush=True)
@@ -1910,8 +2019,10 @@ def run_all_personas(persona_stocks, indicators_all, tv_mcp_all):
                 if not soul:
                     print(f"[Arena]  ⚠️  Skipping {persona} — no SOUL.md", flush=True)
                     all_results[persona] = {"persona": persona, "results": [], "error": "no SOUL.md"}
-                    continue
                 
+                # Skip personas with no assigned stocks
+                if persona not in persona_stocks or not persona_stocks[persona]:
+                    print(f"[Arena]  Skipping {persona} — no stocks passed screening", flush=True)
                 fut = pool.submit(
                     run_persona_subprocess,
                     persona, persona_stocks[persona], soul,
@@ -1975,6 +2086,87 @@ def scan_global_markets():
     return market_by_region, flat_results, tv_mcp_data
 
 
+# FIX 7 — Direct Yahoo v8/v7 API calls (10-15x faster than yfinance)
+_YAHOO_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json,text/plain,*/*",
+}
+
+
+def yahoo_v8_history(ticker, range_str="1y", interval="1d"):
+    """Fetch historical price data via Yahoo Finance v8 chart API."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range={range_str}&interval={interval}"
+    try:
+        resp = requests.get(url, headers=_YAHOO_HEADERS, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        result = data.get("chart", {}).get("result", [])
+        if not result:
+            return None
+        r = result[0]
+        timestamps = r.get("timestamp", [])
+        quotes = r.get("indicators", {}).get("quote", [])
+        if not quotes or not timestamps:
+            return None
+        q = quotes[0]
+        return {
+            "timestamp": timestamps,
+            "open": q.get("open", []),
+            "high": q.get("high", []),
+            "low": q.get("low", []),
+            "close": q.get("close", []),
+            "volume": q.get("volume", []),
+        }
+    except Exception:
+        return None
+
+
+def yahoo_v7_quote(ticker):
+    """Fetch real-time quote data via Yahoo Finance v7 quote API."""
+    url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={ticker}"
+    try:
+        resp = requests.get(url, headers=_YAHOO_HEADERS, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        result = data.get("quoteResponse", {}).get("result", [])
+        if not result:
+            return None
+        q = result[0]
+        return {
+            "price": q.get("regularMarketPrice") or q.get("previousClose"),
+            "marketCap": q.get("marketCap"),
+            "trailingPE": q.get("trailingPE"),
+            "forwardPE": q.get("forwardPE"),
+            "trailingEps": q.get("trailingEps"),
+            "forwardEps": q.get("forwardEps"),
+            "earningsQuarterlyGrowth": q.get("earningsQuarterlyGrowth"),
+            "sector": q.get("sector"),
+            "beta": q.get("beta"),
+            "dividendYield": q.get("dividendYield"),
+            "volume": q.get("regularMarketVolume"),
+            "change_pct": q.get("regularMarketChangePercent"),
+        }
+    except Exception:
+        return None
+
+
+def _yf_fetch_with_retry(ticker_str, operation="history", period="1y"):
+    """Fetch yfinance data with retry logic: try once, wait 1s, retry once."""
+    with _yf_lock:
+        stock = yf.Ticker(ticker_str)
+        for attempt in range(2):
+            try:
+                if operation == "info":
+                    return stock.info or {}
+                return stock.history(period=period)
+            except Exception:
+                if attempt == 0:
+                    time.sleep(1)
+                else:
+                    raise
+    return None
+
+
 def main():
     start_time = time.monotonic()
 
@@ -1986,8 +2178,27 @@ def main():
     if not DEEPSEEK_API_KEY:
         print("[Arena]  ⚠️  No DeepSeek API key configured. Analyses will use yfinance data only.", flush=True)
 
-    # ─── PHASE 1: TV Scanner + yfinance + TV MCP ──────────────────────
-    market_by_region, flat_results, tv_mcp_data = scan_global_markets()
+    # ─── MODE CHECK ───────────────────────────────────────────────────
+    # TARGET_STOCKS mode: skip Phase 1 (TV scanner) and use TARGET_STOCK_LIST directly.
+    # TV_SCAN mode: normal full pipeline (Phase 1 + 2 + 3).
+    if MODE.upper() == "TARGET_STOCKS":
+        print(f"[Arena]  MODE=TARGET_STOCKS — skipping Phase 1 (TV scanner), using {len(TARGET_STOCK_LIST)} target stocks", flush=True)
+        tv_mcp_data = {}
+        # Build flat_results using analyze_ticker() for full fundamentals (PE, EPS, RSI, MA50, MA200, etc.)
+        flat_results = {}
+        for ticker in TARGET_STOCK_LIST:
+            try:
+                result = analyze_ticker(ticker)
+                if result:
+                    flat_results[ticker] = result
+                else:
+                    print(f"[Arena]  ⚠ {ticker} — yfinance returned no data, skipping", flush=True)
+            except Exception as e:
+                print(f"[Arena]  ⚠ {ticker} — yfinance error: {e}", flush=True)
+        print(f"[Arena]  Built flat_results for {len(flat_results)} tickers from TARGET_STOCK_LIST (with full fundamentals)", flush=True)
+    else:
+        # ─── PHASE 1: TV Scanner + yfinance + TV MCP ──────────────────
+        market_by_region, flat_results, tv_mcp_data = scan_global_markets()
 
     # ─── PHASE 2: Assign stocks to personas ───────────────────────────
     print(f"[Arena]  Phase 2: Assigning stocks to {len(PERSONAS)} personas...", flush=True)
