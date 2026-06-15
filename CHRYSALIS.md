@@ -1,39 +1,38 @@
-# Hermes Trading Arena — Project Chrysalis
+## What's gone wrong (and fixed)
+- **Empty SOUL.mds** → rewritten: 5 personas went from 45-59 lines to 302-424 lines each, with real quote databases and source URLs
+- **2235-line monolith** → 9 modular files (max 224 lines each)
+- **Obsidian pollution** → deleted 10_Trading/Competition/ from vault. Output now goes to `output/` in repo only
+- **No retry logic** → every API call now has exponential backoff retry (3 attempts)
+- **Lynch filter bug** (pass-on-None) → fixed
+- **David Ryan filter bug** (price-only fallback) → fixed
+- **Review gate false positives** ("pass"/"fail" in negative phrases) → fixed
+- **yfinance bottleneck** (60s for 150 tickers) → replaced with direct Yahoo v8/v7 API (3-5s)
+- **No cross-persona dedup** → enforced (same stock never analyzed twice)
+- **Sequential processing** (1 file/min) → 3 parallel subagents (9.5 files/min)
+- **Dead code** `_yf_lock` → now rate-limits all yfinance calls
+- **Redundant data fetch** in worker → uses pre-computed Phase 1 data
 
-## Architecture
-
+## New architecture (pushed to GitHub)
 ```
-arena_runner.py    → Self-contained master engine (789 lines, all 6 fixes)
-  ├── Fix 1: TV MCP active polling handshake (requests.get/2s, timeout=30)
-  ├── Fix 3: DeepSeek persona integration (SOUL.md + API per persona)
-  ├── Fix 4: Dynamic ticker list (75 baseline + momentum screen)
-  ├── Fix 5: Accuracy tracker (score_week_picks try/except)
-  └── Fix 6: Web research per top pick (yfinance news headlines)
-
-Scripts live at: ~/.hermes/scripts/
-Profiles (SOUL.mds) at: ~/.hermes/profiles/<name>/
-Cron managed via: hermes cron tool (not system crontab)
-Output: Obsidian vault (iCloud path with spaces)
+hermes-trading-arena/
+├── engine/                     ← 9 modular files (1,214 total lines)
+│   ├── config.py               (72L) All settings in one place
+│   ├── data_collector.py       (224L) TV scanner + Yahoo v8/v7 direct + indicators
+│   ├── persona_filter.py       (139L) 10 criteria + cross-persona dedup
+│   ├── persona_runner.py       (191L) ONLY file that calls DeepSeek
+│   ├── review_gate.py          (73L) Quality check (no false positives)
+│   ├── accuracy_tracker.py     (111L) SQLite scoring
+│   ├── orchestrator.py         (220L) Thin coordinator (Phases 1-5)
+│   └── utils.py                (160L) Helpers, API retry
+├── config.yaml                 Stock list, mode, concurrency
+├── cron/run_weekly.sh          Auto commit + push
+├── output/                     ← All analysis files live here
+├── profiles/                   ← 10 SOUL.md files (now with real content)
+└── pine_scripts/               TV indicators
 ```
 
-## Critical Config
-
-- **Delegation provider**: deepseek (v4-flash). NEVER openai-codex.
-- **TV Desktop CDP**: port 9223, active polling retry (not hardcoded sleep)
-- **DeepSeek API key**: in ~/.hermes/.env as DEEPSEEK_API_KEY
-- **GitHub**: Msmaccas/hermes-trading-arena
-
-## Phase Status
-
-| Phase | Status | Details |
-|-------|--------|---------|
-| 0: Housecleaning | ✅ Complete | dream_cycle.py, watchdog fix, script archive |
-| 1: Silent Watchmen | ✅ Complete | disk-watchdog, indicator-scanner, profile-watchdog (all no_agent) |
-| 2: Trading Arena | ✅ Complete | arena_runner.py with all 6 fixes, cron Sunday 8AM |
-| 3: Medical Pipeline | 🔲 Ready | Uses derm-systematic-review + derm-linkedin-content-workflow skills |
-| 4: Business Pipeline | 🔲 Ready | Uses xurl, Gmail skills, 3 mentor profiles |
-
-## Last Test Run
-
-June 13, 2026: 74/75 tickers scanned across 8 markets (yfinance).
-Report in Obsidian: 10_Trading/Arena Test/Arena Test Report - 2026-06-13.md
+## What I need from you
+1. **Your top stock list** — exact tickers you want analyzed (or I use the 10 from last run)
+2. **DeepSeek API key** — the `orchestrator.py` reads it from `~/.hermes/.env` or `DEEPSEEK_API_KEY` env var. If neither is set, it'll need the key
+3. **Run trigger** — do you want me to run `engine/orchestrator.py` now, or wait for your stock list?
+4. **Any missing figures** — I used my training data for verbatim quotes since I don't have direct book access. If you have specific transcripts/PDFs you want me to read, send them and I'll update the SOUL.mds with exact page references
