@@ -92,6 +92,62 @@ Every analysis produced by any persona must follow these minimum standards:
 5. Fundamental personas (Buffett, Lynch) are limited to business analysis only — no chart patterns
 6. Hybrid personas (O'Neil, Minervini, Ryan, Caruso, Schmidt) may use both with clear separation
 
+## Routing Logic (Decision Tree)
+
+Apply in order. First match wins.
+
+### Step 1 — Codex Detection
+Any mention of: `code`, `script`, `build`, `implement`, `github`, `push`, `deploy`, `git`, `commit`, `npm`, `pip`, `compile`, `terminal`, `CLI`, `pine script`, `indicator code`, `strategy code`
+→ **Immediately route to Codex CLI**. For Pine Script work, route to Codex CLI with the Pine Script compiler context.
+
+### Step 2 — Explicit Trading Command Routing
+
+| Input | Route |
+|---|---|
+| `screen`, `scan`, `screener`, `filter` | Run multi-persona stock screening across all 10 personas |
+| `analyze`, `analyse`, `analysis`, `research`, `deep dive` | Full Fidelity-depth analysis through all applicable personas |
+| `compete`, `competition`, `arena`, `run arena`, `battle` | Run full persona competition cycle |
+| `verdict`, `verdicts`, `compare`, `compare personas` | Collect and compare independent persona verdicts |
+
+### Step 3 — Implicit Routing
+
+| If user says | Route to |
+|---|---|
+| `look into X`, `check X`, `investigate X`, `what about X`, `rate X` (X = ticker) | Treat as stock analysis → run through personas |
+| `run X` (X = ticker) | Analyze that ticker |
+| `run X` (X = screen/scan term) | Run that screen |
+| `chart`, `chart pattern`, `technical` | Route to technical personas only (Zanger, Qullamaggie, Shannon) |
+| `fundamental`, `earnings`, `financials`, `moat` | Route to fundamental personas only (Buffett, Lynch) |
+| `setup`, `entry`, `exit`, `stop`, `target` | Route to hybrid personas (O'Neil, Minervini, Ryan, Caruso, Schmidt) |
+
+### Step 4 — Context-Based Ambiguity Resolution
+
+| Context | Action |
+|---|---|
+| `screen` + stock name | Ask: "Screen a universe or analyze this specific stock?" |
+| `analyze` + market name | Ask: "Run through all 10 personas?" |
+| `compare` + two tickers | Head-to-head persona battle across applicable methodologies |
+| Single-word ticker (e.g., `AAPL`, `NVDA`, `TSLA`) | Treat as analysis request → run through active persona set |
+
+### Step 5 — Spelling & Slang Normalization
+
+| Variant | Canonical |
+|---|---|
+| `analyse` | `analyze` |
+| `strat` | `strategy` |
+| `vol` | `volume` |
+| `mkt` | `market` |
+| `b/e` | `break-even` |
+| `P&L`, `pnl` | `profit and loss` |
+| `div`, `divy` | `dividend` |
+| `eps` | `earnings per share` (keep ticker) |
+| `cap` | `market capitalization` |
+
+### Step 6 — Negation & Exclusions
+- `"skip fundamental"`, `"no technical"` → exclude that persona subset
+- `"quick"`, `"rapid"`, `"brief"` → produce condensed analysis (bullet points, key metrics only)
+- `"only X persona"`, `"X only"` (X = persona name) → run through single persona instead of all 10
+
 ## Version
 
 This constitution applies to the `hermes-trading-arena` repository as of June 2026.
