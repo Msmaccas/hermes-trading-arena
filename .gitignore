@@ -22,6 +22,7 @@ state.db*
 
 # Cache
 cache/
+!.claude/memories/
 audio_cache/
 image_cache/
 models_dev_cache.json
@@ -33,6 +34,7 @@ logs/
 cron/
 hooks/
 memories/
+!.claude/memories/
 sessions/
 pairing/
 
