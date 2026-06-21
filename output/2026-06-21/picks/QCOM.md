@@ -72,7 +72,7 @@ The weekly chart shows a textbook uptrend. QCOM bottomed near $120 in late 2024 
 | Volume on pullback | Moderate | No panic selling |
 | RSI (daily) | ~50–60 | Cooling from overbought |
 
-QCOM has pulled back from its all-time high of ~$259 to the current $226.11 — a decline of ~12.7%. This is a normal correction within a strong uptrend. The pullback is coming on declining volume, which Shannon identifies as a low-risk entry opportunity.
+QCOM has pulled back from its 52-week high of ~$250 to the current $226.11 — a decline of ~9.6%. This is a normal correction within a strong uptrend. The pullback is coming on declining volume, which Shannon identifies as a low-risk entry opportunity.
 
 ### Intraday Timeframe ✅ APPROACHING VWAP SUPPORT
 

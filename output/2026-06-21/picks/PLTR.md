@@ -7,9 +7,9 @@ methodology: Episodic Pivot (EP)
 entry_zone: "$125–$130"
 stop_loss: "$117.50"
 target_price: "$170"
-risk: "$1.53–$10.97"
+risk: "$7.50–$10.97"
 reward: "$41.53–$45.00"
-risk_reward_ratio: "4.1:1 – 5.8:1"
+risk_reward_ratio: "3.8:1 – 6.0:1"
 confidence: "HIGH"
 ---
 

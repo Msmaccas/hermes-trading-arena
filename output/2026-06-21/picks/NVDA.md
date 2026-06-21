@@ -7,9 +7,9 @@ methodology: CAN SLIM
 entry_zone: "$204–$210"
 stop_loss: "$196"
 target_price: "$250"
-risk: "$8.69–$14.69"
-reward: "$39.31–$46.00"
-risk_reward_ratio: "3.1:1 – 4.5:1"
+risk: "$8.00–$14.00"
+reward: "$40.00–$46.00"
+risk_reward_ratio: "2.9:1 – 5.8:1"
 confidence: "MODERATE-HIGH"
 ---
 

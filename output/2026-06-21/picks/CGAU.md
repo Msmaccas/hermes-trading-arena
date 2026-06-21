@@ -85,8 +85,8 @@ Gold miners (IBD Group #43: Gold & Silver Mining) are one of the strongest indus
 | MA | Price | Status |
 |----|-------|--------|
 | 20-day EMA | ~$16.80 | Price is near/at MA — tight |
-| 50-day SMA | ~$17.64 | Price slightly below — a minor yellow flag |
-| 200-day SMA | ~$15.24 | Well above — confirmed uptrend |
+| 50-day SMA | ~$17.60 | Price slightly below — a minor yellow flag |
+| 200-day SMA | ~$15.17 | Well above — confirmed uptrend |
 
 The 200-day SMA is sloping upward, confirming the long-term uptrend. The 50-day SMA is flat to slightly declining, which is the result of the recent pullback from $20.18. Zanger would want to see the stock reclaim the 50-MA for the strongest entry.
 

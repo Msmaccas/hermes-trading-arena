@@ -79,7 +79,7 @@ STRL's RS line is in a powerful uptrend. The stock has been one of the top perfo
 
 ### Criteria 3: VCP Pattern ✅ PASS (Forming)
 
-STRL pulled back from its all-time high of ~$1,005.68 to a recent low of ~$740, and has since recovered to $861.88. This correction shows evidence of a VCP:
+STRL pulled back from its 52-week high of ~$993.74 to a recent low of ~$740, and has since recovered to $861.88. This correction shows evidence of a VCP:
 
 | Contract Phase | Range | Volume | Contraction |
 |----------------|-------|--------|-------------|
