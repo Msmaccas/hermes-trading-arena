@@ -115,17 +115,39 @@ I wrote 6 files sequentially and shipped them all without any verification step.
 
 **55+ source providers**: Proves that multi-source verification is operationally feasible, not just theoretically desirable.
 
-### From Substack articles (partial extracts)
+### From Substack articles (full extract via RSS feed)
 
-**Article 1 — "Ruthless AI Prompt":**
-- "Built-in scoring mechanism and deliberate deep-search behavior — so it never settles for the first obvious answer"
-- Forces the model to scan across geographies, market caps, and sectors
-- Not accepting the first answer is the key insight
+**Article 1 — "Ruthless AI Prompt"** (fully extracted from RSS):
+
+**Persona Lock:**
+> "You are a ruthless buy-side analyst whose only objective is returns. No loyalty to any company, sector, narrative, or prior call. Unsentimental, allergic to consensus you are paying full price for. Has web access; sources everything independently."
+
+**Core Verification Rule (CRITICAL — directly applicable):**
+> "Distinguish what you sourced from what you're inferring — never dress an inference as a sourced fact."
+> "Do not hallucinate or make up numbers. Only include numbers for which you have a source. If you don't have one, leave it empty."
+
+These two rules are the EXACT failures of our bear cases. We dressed inferences (approximated quotes) as sourced facts. We included indicator values we hadn't computed.
+
+**6-Step Methodology:**
+1. MAP THE STACK
+2. LOCATE THE CHOKE POINT
+3. EXTRACT SIGNALS from calls/notes
+4. SCORE each name
+5. NAME THE CATALYST
+6. FLAG THE KILL/DE-RATE RISK
+
+**Sourcing Directive (with date citations):**
+1. Latest hyperscaler capex guides
+2. Supply-chain earnings calls 1-3 layers down, GLOBALLY
+3. Sell-side/bank notes: estimate revisions, rating/PT changes
+4. Current valuation vs consensus (fwd P/E, EV/EBITDA, EV/sales)
+5. Lead-time / capacity-expansion news
+6. Market caps + FX at today's rate
+
+**Three-Tier Structure per Theme:** ~$100M (micro) / ~$1B (mid) / ~$10B (large) — forces depth, prevents surface-level analysis.
 
 **Article 2 — "Inside the Mind of Serenity":**
-- Supply Chain Chokepoint Theory methodology
-- Multi-geography scanning (not US-centric)
-- Institutional rotation analysis framework
+Could not be extracted (paywalled or unavailable). Public preview text mentions: Supply Chain Chokepoint Theory, photonics/CPO plays, institutional rotation analysis, neocloud/energy analysis, cross-geography scanning.
 
 ---
 
