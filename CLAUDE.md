@@ -72,6 +72,18 @@ preferences/
   audience-profiles.md      # High-ticket investor audience profiles
 ```
 
+## Pre-Session Checklist
+
+Before every session, run this checklist:
+
+1. **CDP Auto-Check**: Check Chrome CDP on port 9222 (curl -s http://localhost:9222/json/version). If down, run `chrome-share` to launch Chrome with remote debugging.
+2. **Session State**: Verify chart layout and persona files are intact.
+3. **Command Environment**: Confirm .claude/agents/ are present and readable.
+
+## Research Gate
+
+BEFORE any content work, verify: have 20+ unique URLs been researched? If no, delegate a research subagent first.
+
 ## Output Standards
 
 Every analysis produced by any persona must follow these minimum standards:
